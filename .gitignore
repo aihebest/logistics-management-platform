@@ -1,0 +1,53 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Logistics Platform — .gitignore
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Secrets & environment files ────────────────────────────────────────────────
+# Real credentials — NEVER commit this
+.env
+*.env.local
+*.env.production
+src/web/.env.local
+src/web/.env.production
+
+# .env.docker is a TEMPLATE (no real values) — safe to commit
+!.env.docker
+
+# ── .NET / C# ──────────────────────────────────────────────────────────────────
+src/api/bin/
+src/api/obj/
+src/api/*.user
+src/api/.vs/
+*.suo
+*.ncrunchproject
+*.DotSettings.user
+TestResults/
+
+# ── Node / React ───────────────────────────────────────────────────────────────
+node_modules/
+src/web/node_modules/
+src/web/dist/
+src/web/.vite/
+src/web/coverage/
+
+# ── Docker generated ───────────────────────────────────────────────────────────
+# (docker-compose.yml itself IS committed)
+docker-compose.override.yml
+
+# ── OS / Editor ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/settings.json          # Keep launch.json / extensions.json but not personal settings
+.idea/
+
+# ── Logs & temp ────────────────────────────────────────────────────────────────
+*.log
+*.tmp
+*.swp
+logs/
+
+# ── Word doc lock files ────────────────────────────────────────────────────────
+~$*.docx
+~$*.xlsx
+~$*.pptx

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="cyangradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#22d3ee;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bluegradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4338ca;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e1b8b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- D body -->
+  <path d="M40 30 L40 170 L110 170 C155 170 180 145 180 100 C180 55 155 30 110 30 Z
+            M80 70 L105 70 C130 70 140 82 140 100 C140 118 130 130 105 130 L80 130 Z"
+        fill="url(#bluegradient)" />
+  <!-- Cyan 3D highlight wedge top-left -->
+  <polygon points="40,30 75,30 75,55 40,75" fill="url(#cyangradient)" opacity="0.95"/>
+  <!-- Inner cyan accent -->
+  <polygon points="75,30 110,30 80,70 75,55" fill="#67e8f9" opacity="0.7"/>
+</svg>
