@@ -90,6 +90,10 @@ services:
       # Seed demo data on first startup
       Demo__SeedOnStartup: "true"
 
+      # CORS — allow requests from the web frontend
+      Cors__AllowedOrigins__0: "http://localhost:3100"
+      Cors__AllowedOrigins__1: "http://localhost:5173"
+
     ports:
       - "8080:8080"
     depends_on:
@@ -116,7 +120,7 @@ services:
         VITE_ENTRA_API_SCOPE: "api://${ENTRA_API_CLIENT_ID}/Logistics.Access"
     container_name: logistics-web
     ports:
-      - "3000:80"
+      - "3100:80"
     depends_on:
       - api
     networks:
