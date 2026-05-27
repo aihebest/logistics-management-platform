@@ -13,6 +13,41 @@ namespace LogisticsApi.Controllers;
 [Authorize]
 public class DriversController(AppDbContext db, IAuditService audit) : ControllerBase
 {
+    // ── Register a new driver (pre-registration before Entra account exists) ─────
+    [HttpPost]
+    [Authorize(Roles = "Manager,Admin")]
+    public async Task<ActionResult<UserDto>> Register(RegisterDriverDto dto)
+    {
+        if (await db.Users.AnyAsync(u => u.Email == dto.Email))
+            return Conflict(new { error = "A user with this email already exists." });
+
+        var driver = new Models.Entities.User
+        {
+            Id = Guid.NewGuid(),
+            // Placeholder OID — replaced when the driver first logs in via Entra ID
+            EntraObjectId = $"pre-{Guid.NewGuid():N}",
+            FullName = dto.FullName,
+            Email = dto.Email.ToLowerInvariant().Trim(),
+            PhoneNumber = dto.PhoneNumber,
+            Role = "Driver",
+            DriverStatus = "OffDuty",
+            LicenceNo = dto.LicenceNo,
+            LicenceExpiry = dto.LicenceExpiry,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.Users.Add(driver);
+        await db.SaveChangesAsync();
+
+        var callerEmail = User.FindFirstValue("preferred_username") ?? "";
+        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        await audit.LogAsync("Driver", driver.Id.ToString(), "Registered", callerId ?? "", callerEmail, null,
+            $"Driver pre-registered: {driver.FullName} ({driver.Email})");
+
+        return CreatedAtAction(nameof(Get), new { id = driver.Id }, ToDto(driver));
+    }
+
     [HttpGet]
     [Authorize(Roles = "Coordinator,Manager,Admin")]
     public async Task<IEnumerable<UserDto>> GetAll()

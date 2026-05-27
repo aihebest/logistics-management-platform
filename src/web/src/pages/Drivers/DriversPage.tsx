@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { driversApi } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
@@ -10,6 +11,7 @@ const STATUS_OPTIONS = ['Available', 'OnAssignment', 'OffDuty', 'OnBreak']
 export default function DriversPage() {
   const { hasRole } = useAuth()
   const qc = useQueryClient()
+  const [showForm, setShowForm] = useState(false)
 
   const { data: drivers = [], isLoading } = useQuery({
     queryKey: ['drivers'],
@@ -28,15 +30,91 @@ export default function DriversPage() {
     onError: () => toast.error('Failed to update status'),
   })
 
+  const registerDriver = useMutation({
+    mutationFn: driversApi.register,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['drivers'] })
+      setShowForm(false)
+      toast.success('Driver registered successfully')
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error ?? 'Failed to register driver'
+      toast.error(msg)
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    registerDriver.mutate({
+      fullName: fd.get('fullName') as string,
+      email: fd.get('email') as string,
+      phoneNumber: fd.get('phoneNumber') as string || undefined,
+      licenceNo: fd.get('licenceNo') as string || undefined,
+      licenceExpiry: fd.get('licenceExpiry') as string || undefined,
+    })
+  }
+
   if (isLoading) return <PageLoader />
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Drivers</h1>
-        <span className="text-sm text-gray-500">{drivers.length} drivers</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">{drivers.length} driver{drivers.length !== 1 ? 's' : ''}</span>
+          {hasRole('Manager', 'Admin') && (
+            <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+              + Register Driver
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* ── Register Driver Form ──────────────────────────────────────────────── */}
+      {showForm && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-gray-900">Register New Driver</h2>
+            <p className="text-xs text-gray-400 max-w-sm text-right">
+              The driver will be pre-registered with status <strong>Off Duty</strong>.
+              When they sign in for the first time their account will be automatically linked.
+            </p>
+          </div>
+          <form onSubmit={handleSubmit} className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="col-span-2 md:col-span-1">
+              <label className="label">Full Name <span className="text-red-500">*</span></label>
+              <input name="fullName" className="input" placeholder="e.g. Kwame Asante" required />
+            </div>
+            <div className="col-span-2 md:col-span-1">
+              <label className="label">Email Address <span className="text-red-500">*</span></label>
+              <input name="email" type="email" className="input" placeholder="e.g. k.asante@company.com" required />
+            </div>
+            <div>
+              <label className="label">Phone Number</label>
+              <input name="phoneNumber" className="input" placeholder="e.g. +234 80 111 0011" />
+            </div>
+            <div>
+              <label className="label">Licence No</label>
+              <input name="licenceNo" className="input" placeholder="e.g. GP-DL-011" />
+            </div>
+            <div>
+              <label className="label">Licence Expiry</label>
+              <input name="licenceExpiry" type="date" className="input" />
+            </div>
+            <div className="col-span-full flex gap-3 pt-1">
+              <button type="submit" className="btn-primary" disabled={registerDriver.isPending}>
+                {registerDriver.isPending ? 'Registering…' : 'Register Driver'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── Drivers Table ─────────────────────────────────────────────────────── */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -90,6 +168,18 @@ export default function DriversPage() {
                   </td>
                 </tr>
               ))}
+              {drivers.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
+                    No drivers registered yet.{' '}
+                    {hasRole('Manager', 'Admin') && (
+                      <button className="text-brand-600 hover:underline" onClick={() => setShowForm(true)}>
+                        Register the first driver →
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

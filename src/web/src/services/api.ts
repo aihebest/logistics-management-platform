@@ -323,12 +323,24 @@ export interface MovementRegister {
 export const driversApi = {
   getAll: () => api.get<User[]>('/drivers').then(r => r.data),
   get: (id: string) => api.get<User>(`/drivers/${id}`).then(r => r.data),
+  register: (data: {
+    fullName: string
+    email: string
+    phoneNumber?: string
+    licenceNo?: string
+    licenceExpiry?: string
+  }) => api.post<User>('/drivers', data).then(r => r.data),
   updateStatus: (id: string, status: string) =>
     api.patch(`/drivers/${id}/status`, { status }),
   getAssignments: (id: string) =>
     api.get<Assignment[]>(`/drivers/${id}/assignments`).then(r => r.data),
   getPerformance: (id: string) =>
     api.get<DriverPerformance>(`/drivers/${id}/performance`).then(r => r.data),
+}
+
+export const authApi = {
+  /** Called once per login session to link/create the platform User record. */
+  me: () => api.get<User>('/auth/me').then(r => r.data),
 }
 
 export const vehiclesApi = {
