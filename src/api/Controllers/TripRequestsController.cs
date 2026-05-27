@@ -14,7 +14,9 @@ namespace LogisticsApi.Controllers;
 public class TripRequestsController(AppDbContext db, IAssignmentEngine engine) : ControllerBase
 {
     [HttpGet]
-    public async Task<IEnumerable<TripRequestDto>> GetAll([FromQuery] string? status)
+    public async Task<IEnumerable<TripRequestDto>> GetAll(
+        [FromQuery] string? status,
+        [FromQuery] string? movementType)
     {
         var query = db.TripRequests
             .Include(t => t.RequestedBy)
@@ -24,6 +26,9 @@ public class TripRequestsController(AppDbContext db, IAssignmentEngine engine) :
 
         if (!string.IsNullOrEmpty(status))
             query = query.Where(t => t.Status == status);
+
+        if (!string.IsNullOrEmpty(movementType))
+            query = query.Where(t => t.MovementType == movementType);
 
         return await query
             .OrderByDescending(t => t.CreatedAt)
@@ -60,6 +65,9 @@ public class TripRequestsController(AppDbContext db, IAssignmentEngine engine) :
             Status = "Pending",
             Priority = dto.Priority,
             Notes = dto.Notes,
+            MovementType = dto.MovementType,
+            DepartureDate = dto.DepartureDate,
+            DepartureTime = dto.DepartureTime?.ToString("HH:mm"),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -80,7 +88,6 @@ public class TripRequestsController(AppDbContext db, IAssignmentEngine engine) :
     }
 
     [HttpPatch("{id:guid}/cancel")]
-    [Authorize(Roles = "Coordinator,Manager,Admin")]
     public async Task<IActionResult> Cancel(Guid id)
     {
         var trip = await db.TripRequests.Include(t => t.Assignment).FirstOrDefaultAsync(t => t.Id == id);
@@ -109,6 +116,9 @@ public class TripRequestsController(AppDbContext db, IAssignmentEngine engine) :
             t.RequestedDateTime, t.Status, t.Priority, t.Notes, t.CreatedAt,
             a == null ? null : new AssignmentSummaryDto(
                 a.Id, a.Driver?.FullName ?? "", a.Vehicle?.RegistrationNo ?? "",
-                a.Status, a.StartTime, a.EstimatedEndTime));
+                a.Status, a.StartTime, a.EstimatedEndTime),
+            t.MovementType ?? "IntraState",
+            t.DepartureDate,
+            string.IsNullOrEmpty(t.DepartureTime) ? null : TimeOnly.Parse(t.DepartureTime));
     }
 }

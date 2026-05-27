@@ -3,35 +3,42 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { maintenanceApi, vehiclesApi } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
-import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
 
 const STATUS_FILTER = ['', 'Scheduled', 'InProgress', 'Completed', 'Overdue']
+const CATEGORY_FILTER = ['', 'Routine', 'FaultRepair']
 
 export default function MaintenancePage() {
-  const { hasRole } = useAuth()
   const qc = useQueryClient()
   const [statusFilter, setStatusFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [category, setCategory] = useState('Routine')
 
   const { data: records = [], isLoading } = useQuery({
-    queryKey: ['maintenance', statusFilter],
-    queryFn: () => maintenanceApi.getAll({ status: statusFilter || undefined }),
+    queryKey: ['maintenance', statusFilter, categoryFilter],
+    queryFn: () => maintenanceApi.getAll({
+      status: statusFilter || undefined,
+      category: categoryFilter || undefined,
+    }),
   })
 
   const { data: vehicles = [] } = useQuery({
     queryKey: ['vehicles'],
     queryFn: () => vehiclesApi.getAll(),
-    enabled: showForm,
   })
 
   const createRecord = useMutation({
     mutationFn: maintenanceApi.create,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['maintenance'] }); setShowForm(false); toast.success('Maintenance record created') },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['maintenance'] })
+      setShowForm(false)
+      toast.success('Maintenance record created')
+    },
     onError: () => toast.error('Failed to create record'),
   })
 
-  const updateRecord = useMutation({
+  const completeRecord = useMutation({
     mutationFn: ({ id, data }: { id: string; data: object }) => maintenanceApi.update(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['maintenance'] }); toast.success('Record updated') },
   })
@@ -40,12 +47,18 @@ export default function MaintenancePage() {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     createRecord.mutate({
-      vehicleId: fd.get('vehicleId'),
-      type: fd.get('type'),
-      scheduledDate: fd.get('scheduledDate'),
-      vendorName: fd.get('vendorName') || undefined,
-      vendorContact: fd.get('vendorContact') || undefined,
-      notes: fd.get('notes') || undefined,
+      vehicleId: fd.get('vehicleId') as string,
+      type: fd.get('type') as string,
+      category: fd.get('category') as string,
+      scheduledDate: fd.get('scheduledDate') as string,
+      vendorName: fd.get('vendorName') as string || undefined,
+      vendorContact: fd.get('vendorContact') as string || undefined,
+      notes: fd.get('notes') as string || undefined,
+      faultReported: category === 'FaultRepair',
+      faultDescription: fd.get('faultDescription') as string || undefined,
+      dateReported: fd.get('dateReported') as string || undefined,
+      partsReplaced: fd.get('partsReplaced') as string || undefined,
+      repairRemarks: fd.get('repairRemarks') as string || undefined,
     })
   }
 
@@ -55,13 +68,14 @@ export default function MaintenancePage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Maintenance</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="input w-auto">
+            {CATEGORY_FILTER.map(c => <option key={c} value={c}>{c || 'All Categories'}</option>)}
+          </select>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input w-auto">
             {STATUS_FILTER.map(s => <option key={s} value={s}>{s || 'All Status'}</option>)}
           </select>
-          {hasRole('Manager', 'Mechanic', 'Admin') && (
-            <button className="btn-primary" onClick={() => setShowForm(!showForm)}>+ Add Record</button>
-          )}
+          <button className="btn-primary" onClick={() => setShowForm(!showForm)}>+ New Record</button>
         </div>
       </div>
 
@@ -73,14 +87,62 @@ export default function MaintenancePage() {
               <label className="label">Vehicle</label>
               <select name="vehicleId" className="input" required>
                 <option value="">Select vehicle…</option>
-                {vehicles.map(v => <option key={v.id} value={v.id}>{v.registrationNo} — {v.make} {v.model}</option>)}
+                {vehicles.map(v => (
+                  <option key={v.id} value={v.id}>{v.registrationNo} — {v.make} {v.model}</option>
+                ))}
               </select>
             </div>
-            <div><label className="label">Service Type</label><input name="type" className="input" placeholder="e.g. Oil Change, Routine Service" required /></div>
-            <div><label className="label">Scheduled Date</label><input name="scheduledDate" type="date" className="input" required /></div>
-            <div><label className="label">Vendor Name</label><input name="vendorName" className="input" /></div>
+            <div>
+              <label className="label">Category</label>
+              <select name="category" className="input" value={category}
+                onChange={e => setCategory(e.target.value)}>
+                <option value="Routine">Routine Service</option>
+                <option value="FaultRepair">Fault / Repair</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Service Type</label>
+              <select name="type" className="input">
+                <option>Oil Change</option>
+                <option>Routine Service</option>
+                <option>Tyre Replacement</option>
+                <option>Brake Service</option>
+                <option>Engine Repair</option>
+                <option>Electrical Fault</option>
+                <option>Inspection</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Scheduled Date</label>
+              <input name="scheduledDate" type="date" className="input" required />
+            </div>
+            <div><label className="label">Vendor / Workshop</label><input name="vendorName" className="input" /></div>
             <div><label className="label">Vendor Contact</label><input name="vendorContact" className="input" /></div>
-            <div><label className="label">Notes</label><textarea name="notes" className="input" rows={2} /></div>
+            {category === 'FaultRepair' && (
+              <>
+                <div className="md:col-span-2">
+                  <label className="label">Fault Description</label>
+                  <textarea name="faultDescription" className="input" rows={2} placeholder="Describe the fault reported…" />
+                </div>
+                <div>
+                  <label className="label">Date Fault Reported</label>
+                  <input name="dateReported" type="date" className="input" />
+                </div>
+                <div>
+                  <label className="label">Parts Replaced</label>
+                  <input name="partsReplaced" className="input" placeholder="e.g. Brake pads, oil filter" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="label">Repair Remarks</label>
+                  <textarea name="repairRemarks" className="input" rows={2} />
+                </div>
+              </>
+            )}
+            <div className="md:col-span-2">
+              <label className="label">Notes</label>
+              <textarea name="notes" className="input" rows={2} />
+            </div>
             <div className="md:col-span-2 flex gap-3">
               <button type="submit" className="btn-primary" disabled={createRecord.isPending}>Save</button>
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
@@ -89,43 +151,56 @@ export default function MaintenancePage() {
         </div>
       )}
 
-      <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                {['Vehicle', 'Type', 'Scheduled', 'Completed', 'Status', 'Cost', 'Vendor', ''].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {records.map(m => (
-                <tr key={m.id} className={`hover:bg-gray-50 ${m.status === 'Overdue' ? 'bg-red-50' : ''}`}>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{m.vehicleReg}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">{m.type}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{m.scheduledDate}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{m.completedDate ?? '—'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={m.status} /></td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                    {m.cost != null ? `R ${m.cost.toLocaleString()}` : '—'}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{m.vendorName ?? '—'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {(m.status === 'Scheduled' || m.status === 'InProgress' || m.status === 'Overdue') &&
-                     hasRole('Manager', 'Mechanic', 'Admin') && (
-                      <button className="btn-secondary text-xs"
-                        onClick={() => updateRecord.mutate({ id: m.id, data: { status: 'Completed', completedDate: new Date().toISOString().split('T')[0] } })}>
-                        Mark Complete
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {records.length === 0 && <p className="text-center text-gray-400 py-12">No maintenance records</p>}
-        </div>
+      <div className="space-y-3">
+        {records.map(r => (
+          <div key={r.id} className={`card p-4 ${
+            r.status === 'Overdue' ? 'border-l-4 border-red-500' :
+            r.category === 'FaultRepair' ? 'border-l-4 border-orange-400' : ''
+          }`}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-bold text-gray-900">{r.vehicleReg}</span>
+                  <span className="text-sm text-gray-600">{r.type}</span>
+                  <StatusBadge status={r.status} />
+                  <StatusBadge status={r.category} />
+                </div>
+                {r.faultDescription && (
+                  <p className="text-xs text-orange-700 mt-1">⚠ {r.faultDescription}</p>
+                )}
+                {r.partsReplaced && (
+                  <p className="text-xs text-gray-500 mt-1">Parts replaced: {r.partsReplaced}</p>
+                )}
+                {r.repairRemarks && (
+                  <p className="text-xs text-gray-500">Remarks: {r.repairRemarks}</p>
+                )}
+                <p className="text-xs text-gray-400 mt-1">
+                  Scheduled: {r.scheduledDate}
+                  {r.vendorName && ` · ${r.vendorName}`}
+                  {r.cost != null && ` · ₦${r.cost.toLocaleString()}`}
+                </p>
+              </div>
+              {(r.status === 'Scheduled' || r.status === 'InProgress' || r.status === 'Overdue') && (
+                <button
+                  className="btn-secondary text-xs"
+                  onClick={() => completeRecord.mutate({
+                    id: r.id,
+                    data: {
+                      status: 'Completed',
+                      completedDate: new Date().toISOString().split('T')[0],
+                    },
+                  })}
+                  disabled={completeRecord.isPending}
+                >
+                  Mark Complete
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {records.length === 0 && (
+          <div className="card p-12 text-center text-gray-400">No maintenance records found</div>
+        )}
       </div>
     </div>
   )

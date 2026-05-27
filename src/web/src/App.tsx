@@ -11,6 +11,14 @@ import MaintenancePage from './pages/Maintenance/MaintenancePage'
 import FuelPage from './pages/Fuel/FuelPage'
 import ReportsPage from './pages/Reports/ReportsPage'
 import NotificationsPage from './pages/Notifications/NotificationsPage'
+// Phase 2
+import MaterialTransportPage from './pages/MaterialTransport/MaterialTransportPage'
+import DriverPerformancePage from './pages/DriverPerformance/DriverPerformancePage'
+import DriverSchedulePage from './pages/DriverSchedule/DriverSchedulePage'
+// Phase 3
+import TravelRequestPage from './pages/Travel/TravelRequestPage'
+import ProjectMaterialsPage from './pages/ProjectMaterials/ProjectMaterialsPage'
+import MovementRegisterPage from './pages/MovementRegister/MovementRegisterPage'
 
 export default function App() {
   return (
@@ -32,6 +40,14 @@ export default function App() {
               <Route path="/fuel" element={<FuelPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
+              {/* Phase 2 */}
+              <Route path="/material-transport" element={<MaterialTransportPage />} />
+              <Route path="/driver-performance" element={<DriverPerformancePage />} />
+              <Route path="/driver-schedule" element={<DriverSchedulePage />} />
+              {/* Phase 3 */}
+              <Route path="/travel" element={<TravelRequestPage />} />
+              <Route path="/project-materials" element={<ProjectMaterialsPage />} />
+              <Route path="/movement-register" element={<MovementRegisterPage />} />
             </Routes>
           </AppShell>
         </BrowserRouter>

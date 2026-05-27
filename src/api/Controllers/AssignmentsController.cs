@@ -120,6 +120,47 @@ public class AssignmentsController(AppDbContext db, INotificationService notific
         return NoContent();
     }
 
+    [HttpPatch("{id:guid}/status")]
+    [Authorize(Roles = "Coordinator,Manager,Admin")]
+    public async Task<IActionResult> UpdateStatus(Guid id, UpdateAssignmentStatusDto dto)
+    {
+        var assignment = await db.Assignments
+            .Include(a => a.Driver).Include(a => a.Vehicle)
+            .FirstOrDefaultAsync(a => a.Id == id);
+        if (assignment == null) return NotFound();
+
+        var validStatuses = new[] { "Active", "Completed", "Ongoing", "Unattended", "Cancelled" };
+        if (!validStatuses.Contains(dto.Status))
+            return BadRequest(new { error = $"Invalid status. Valid values: {string.Join(", ", validStatuses)}" });
+
+        assignment.Status = dto.Status;
+        if (dto.Notes != null) assignment.Notes = dto.Notes;
+
+        if (dto.Status == "Completed")
+        {
+            assignment.ActualEndTime = dto.ActualEndTime ?? DateTime.UtcNow;
+            assignment.Driver.DriverStatus = "Available";
+            assignment.Driver.LastStatusChange = DateTime.UtcNow;
+            assignment.Vehicle.Status = "Available";
+            assignment.Vehicle.UpdatedAt = DateTime.UtcNow;
+
+            var trip = await db.TripRequests.FindAsync(assignment.TripRequestId);
+            if (trip != null) trip.Status = "Completed";
+        }
+        else if (dto.Status == "Unattended")
+        {
+            // Driver still holds vehicle but trip flagged
+            assignment.Driver.DriverStatus = "OnAssignment";
+        }
+        else if (dto.Status == "Ongoing")
+        {
+            // Extended trip — keep statuses as-is
+        }
+
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
     [HttpPatch("{id:guid}/complete")]
     [Authorize(Roles = "Coordinator,Manager,Admin")]
     public async Task<IActionResult> Complete(Guid id)

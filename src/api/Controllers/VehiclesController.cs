@@ -51,6 +51,9 @@ public class VehiclesController(AppDbContext db) : ControllerBase
             FuelType = dto.FuelType,
             OdometerKm = dto.OdometerKm,
             ServiceIntervalKm = dto.ServiceIntervalKm,
+            ChassisNo = dto.ChassisNo,
+            PurchaseYear = dto.PurchaseYear,
+            Colour = dto.Colour,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -72,6 +75,9 @@ public class VehiclesController(AppDbContext db) : ControllerBase
         if (dto.LastServiceDate.HasValue) vehicle.LastServiceDate = dto.LastServiceDate;
         if (dto.NextServiceDate.HasValue) vehicle.NextServiceDate = dto.NextServiceDate;
         if (dto.AssignedMechanicId.HasValue) vehicle.AssignedMechanicId = dto.AssignedMechanicId;
+        if (dto.ChassisNo != null) vehicle.ChassisNo = dto.ChassisNo;
+        if (dto.PurchaseYear.HasValue) vehicle.PurchaseYear = dto.PurchaseYear;
+        if (dto.Colour != null) vehicle.Colour = dto.Colour;
         vehicle.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
@@ -81,5 +87,7 @@ public class VehiclesController(AppDbContext db) : ControllerBase
     private static VehicleDto ToDto(Models.Entities.Vehicle v) => new(
         v.Id, v.RegistrationNo, v.Make, v.Model, v.Year, v.Status, v.FuelType,
         v.OdometerKm, v.ServiceIntervalKm, v.LastServiceDate, v.NextServiceDate,
-        v.AssignedMechanic?.FullName);
+        v.AssignedMechanic?.FullName,
+        v.ChassisNo, v.PurchaseYear, v.Colour,
+        DateTime.UtcNow.Year - v.Year);
 }

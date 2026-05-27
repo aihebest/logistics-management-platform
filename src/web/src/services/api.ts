@@ -23,7 +23,7 @@ api.interceptors.request.use(async config => {
   return config
 })
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Core Types ────────────────────────────────────────────────────────────────
 
 export interface User {
   id: string
@@ -51,6 +51,11 @@ export interface Vehicle {
   lastServiceDate?: string
   nextServiceDate?: string
   assignedMechanicName?: string
+  // Phase 1
+  chassisNo?: string
+  purchaseYear?: number
+  colour?: string
+  vehicleAge: number
 }
 
 export interface TripRequest {
@@ -66,6 +71,10 @@ export interface TripRequest {
   notes?: string
   createdAt: string
   assignment?: AssignmentSummary
+  // Phase 1
+  movementType: string
+  departureDate?: string
+  departureTime?: string
 }
 
 export interface AssignmentSummary {
@@ -99,6 +108,7 @@ export interface MaintenanceRecord {
   vehicleId: string
   vehicleReg: string
   type: string
+  category: string            // Routine | FaultRepair
   scheduledDate: string
   completedDate?: string
   cost?: number
@@ -107,6 +117,11 @@ export interface MaintenanceRecord {
   notes?: string
   status: string
   attachmentBlobUrl?: string
+  faultReported: boolean
+  faultDescription?: string
+  dateReported?: string
+  partsReplaced?: string
+  repairRemarks?: string
   createdAt: string
 }
 
@@ -116,10 +131,18 @@ export interface FuelLog {
   vehicleReg: string
   loggedByName: string
   fuelDate: string
+  productType: string         // PMS | AGO | DPK | CNG
   litresFilled: number
   costPerLitre: number
   totalCost: number
+  isCashPayment: boolean
   odometerAtFill: number
+  odometerFrom?: number
+  odometerTo?: number
+  mileageCovered?: number
+  fuelGaugeBefore?: number
+  fuelGaugeAfter?: number
+  costCentre?: string
   stationName?: string
   receiptBlobUrl?: string
   notes?: string
@@ -153,6 +176,148 @@ export interface DashboardSummary {
   upcomingMaintenanceCount: number
 }
 
+// ── Phase 2 Types ─────────────────────────────────────────────────────────────
+
+export interface MaterialTransportItem {
+  id: string
+  sNo: number
+  material: string
+  description?: string
+  quantity: number
+}
+
+export interface MaterialTransportRequest {
+  id: string
+  formNumber: string
+  requestedByName: string
+  projectName: string
+  purpose: string
+  loadingPoint: string
+  loadingContactPerson?: string
+  loadingContactPhone?: string
+  loadingDate?: string
+  deliveryPoint: string
+  deliveryContactPerson?: string
+  deliveryContactPhone?: string
+  deliveryDate?: string
+  status: string
+  hodApprovedByName?: string
+  hodApprovedAt?: string
+  hodRemarks?: string
+  managerApprovedByName?: string
+  managerApprovedAt?: string
+  managerRemarks?: string
+  assignedDriverName?: string
+  assignedVehicleReg?: string
+  items: MaterialTransportItem[]
+  createdAt: string
+}
+
+export interface DriverSchedule {
+  id: string
+  driverId: string
+  driverName: string
+  scheduleDate: string
+  location: string
+  shift: string               // Day | Night | Off | Leave
+  notes?: string
+  createdByName: string
+  createdAt: string
+}
+
+export interface DriverIncident {
+  id: string
+  driverId: string
+  driverName: string
+  incidentDate: string
+  type: string                // Accident | TrafficViolation | VehicleDamage | Other
+  description: string
+  severity: string            // Minor | Moderate | Major
+  actionTaken?: string
+  reportedByName: string
+  createdAt: string
+}
+
+export interface DriverPerformance {
+  driverId: string
+  driverName: string
+  currentStatus: string
+  totalTrips: number
+  completedTrips: number
+  cancelledTrips: number
+  totalIncidents: number
+  majorIncidents: number
+  accidentFreeStreak: number
+  recentTrips: Assignment[]
+  recentIncidents: DriverIncident[]
+}
+
+// ── Phase 3 Types ─────────────────────────────────────────────────────────────
+
+export interface TravelRequest {
+  id: string
+  requestedByName: string
+  travellerName: string
+  travelType: string          // LocalFlight | InternationalFlight | Hotel | Guesthouse | Immigration
+  purpose: string
+  origin: string
+  destination: string
+  travelDate: string
+  returnDate?: string
+  flightPreference?: string
+  hotelName?: string
+  numberOfNights?: number
+  passportNumber?: string
+  status: string
+  approvedByName?: string
+  approvedAt?: string
+  approvalNotes?: string
+  createdAt: string
+}
+
+export interface ProjectMaterialTracking {
+  id: string
+  trackingYear: number
+  poNumber?: string
+  poLineItem?: string
+  project?: string
+  buyer?: string
+  description: string
+  quantity?: number
+  supplier?: string
+  freightForwarder?: string
+  readinessDate?: string
+  pickupAuthDate?: string
+  pickupDate?: string
+  modeOfTransport?: string
+  formMNumber?: string
+  blAwbNumber?: string
+  vesselName?: string
+  etd?: string
+  eta?: string
+  deliveryStatus: string
+  actualDeliveryDate?: string
+  remarks?: string
+  updatedAt: string
+}
+
+export interface MovementRegister {
+  id: string
+  movementType: string        // VehicleOut | VehicleIn | MaterialOut | MaterialIn | GatePass | StaffMovement
+  vehicleReg?: string
+  driverName?: string
+  relatedRefNo?: string
+  purpose: string
+  origin: string
+  destination: string
+  movementDateTime: string
+  returnDateTime?: string
+  gatePassNo?: string
+  status: string              // Open | Closed
+  loggedByName: string
+  createdAt: string
+}
+
 // ── API functions ─────────────────────────────────────────────────────────────
 
 export const driversApi = {
@@ -162,22 +327,25 @@ export const driversApi = {
     api.patch(`/drivers/${id}/status`, { status }),
   getAssignments: (id: string) =>
     api.get<Assignment[]>(`/drivers/${id}/assignments`).then(r => r.data),
+  getPerformance: (id: string) =>
+    api.get<DriverPerformance>(`/drivers/${id}/performance`).then(r => r.data),
 }
 
 export const vehiclesApi = {
   getAll: (status?: string) =>
     api.get<Vehicle[]>('/vehicles', { params: { status } }).then(r => r.data),
   get: (id: string) => api.get<Vehicle>(`/vehicles/${id}`).then(r => r.data),
-  create: (data: Partial<Vehicle>) => api.post<Vehicle>('/vehicles', data).then(r => r.data),
-  update: (id: string, data: Partial<Vehicle>) => api.patch(`/vehicles/${id}`, data),
+  create: (data: object) => api.post<Vehicle>('/vehicles', data).then(r => r.data),
+  update: (id: string, data: object) => api.patch(`/vehicles/${id}`, data),
+  getMaintenanceHistory: (id: string) =>
+    api.get<MaintenanceRecord[]>(`/maintenance/vehicle/${id}/history`).then(r => r.data),
 }
 
 export const tripsApi = {
-  getAll: (status?: string) =>
-    api.get<TripRequest[]>('/trips', { params: { status } }).then(r => r.data),
+  getAll: (status?: string, movementType?: string) =>
+    api.get<TripRequest[]>('/trips', { params: { status, movementType } }).then(r => r.data),
   get: (id: string) => api.get<TripRequest>(`/trips/${id}`).then(r => r.data),
-  create: (data: Omit<TripRequest, 'id' | 'requestedById' | 'requestedByName' | 'createdAt' | 'assignment'>) =>
-    api.post<TripRequest>('/trips', data).then(r => r.data),
+  create: (data: object) => api.post<TripRequest>('/trips', data).then(r => r.data),
   cancel: (id: string) => api.patch(`/trips/${id}/cancel`),
 }
 
@@ -187,19 +355,23 @@ export const assignmentsApi = {
   create: (data: object) => api.post<Assignment>('/assignments', data).then(r => r.data),
   override: (id: string, data: { driverId: string; vehicleId: string; notes?: string }) =>
     api.post(`/assignments/${id}/override`, data),
+  updateStatus: (id: string, data: { status: string; notes?: string; actualEndTime?: string }) =>
+    api.patch(`/assignments/${id}/status`, data),
   complete: (id: string) => api.patch(`/assignments/${id}/complete`),
 }
 
 export const maintenanceApi = {
-  getAll: (params?: { status?: string; vehicleId?: string }) =>
+  getAll: (params?: { status?: string; vehicleId?: string; category?: string }) =>
     api.get<MaintenanceRecord[]>('/maintenance', { params }).then(r => r.data),
   get: (id: string) => api.get<MaintenanceRecord>(`/maintenance/${id}`).then(r => r.data),
   create: (data: object) => api.post<MaintenanceRecord>('/maintenance', data).then(r => r.data),
   update: (id: string, data: object) => api.put(`/maintenance/${id}`, data),
+  getVehicleHistory: (vehicleId: string) =>
+    api.get<MaintenanceRecord[]>(`/maintenance/vehicle/${vehicleId}/history`).then(r => r.data),
 }
 
 export const fuelApi = {
-  getAll: (params?: { vehicleId?: string; from?: string; to?: string }) =>
+  getAll: (params?: { vehicleId?: string; from?: string; to?: string; productType?: string }) =>
     api.get<FuelLog[]>('/fuel', { params }).then(r => r.data),
   create: (data: object) => api.post<FuelLog>('/fuel', data).then(r => r.data),
 }
@@ -220,6 +392,69 @@ export const notificationsApi = {
   getMine: () => api.get<Notification[]>('/notifications').then(r => r.data),
   markRead: (id: string) => api.patch(`/notifications/${id}/read`),
   markAllRead: () => api.patch('/notifications/read-all'),
+}
+
+// Phase 2
+export const materialTransportApi = {
+  getAll: (params?: { status?: string; year?: number }) =>
+    api.get<MaterialTransportRequest[]>('/material-transport', { params }).then(r => r.data),
+  get: (id: string) => api.get<MaterialTransportRequest>(`/material-transport/${id}`).then(r => r.data),
+  create: (data: object) =>
+    api.post<MaterialTransportRequest>('/material-transport', data).then(r => r.data),
+  hodApproval: (id: string, action: string, remarks?: string) =>
+    api.post(`/material-transport/${id}/hod-approval`, { action, remarks }),
+  managerApproval: (id: string, action: string, remarks?: string) =>
+    api.post(`/material-transport/${id}/manager-approval`, { action, remarks }),
+  assign: (id: string, driverId: string, vehicleId: string) =>
+    api.post(`/material-transport/${id}/assign`, { driverId, vehicleId }),
+}
+
+export const driverScheduleApi = {
+  getAll: (params?: { driverId?: string; from?: string; to?: string }) =>
+    api.get<DriverSchedule[]>('/driver-schedules', { params }).then(r => r.data),
+  getWeek: (startDate?: string) =>
+    api.get<DriverSchedule[]>('/driver-schedules/week', { params: { startDate } }).then(r => r.data),
+  create: (data: object) => api.post<DriverSchedule>('/driver-schedules', data).then(r => r.data),
+  delete: (id: string) => api.delete(`/driver-schedules/${id}`),
+}
+
+export const driverIncidentsApi = {
+  getAll: (params?: { driverId?: string; type?: string; severity?: string }) =>
+    api.get<DriverIncident[]>('/driver-incidents', { params }).then(r => r.data),
+  create: (data: object) => api.post<DriverIncident>('/driver-incidents', data).then(r => r.data),
+  delete: (id: string) => api.delete(`/driver-incidents/${id}`),
+}
+
+// Phase 3
+export const travelApi = {
+  getAll: (params?: { status?: string; travelType?: string }) =>
+    api.get<TravelRequest[]>('/travel', { params }).then(r => r.data),
+  get: (id: string) => api.get<TravelRequest>(`/travel/${id}`).then(r => r.data),
+  create: (data: object) => api.post<TravelRequest>('/travel', data).then(r => r.data),
+  approve: (id: string, action: string, notes?: string) =>
+    api.post(`/travel/${id}/approve`, { action, notes }),
+  markBooked: (id: string) => api.patch(`/travel/${id}/booked`),
+}
+
+export const projectMaterialsApi = {
+  getAll: (params?: { year?: number; project?: string; status?: string }) =>
+    api.get<ProjectMaterialTracking[]>('/project-materials', { params }).then(r => r.data),
+  get: (id: string) => api.get<ProjectMaterialTracking>(`/project-materials/${id}`).then(r => r.data),
+  create: (data: object) =>
+    api.post<ProjectMaterialTracking>('/project-materials', data).then(r => r.data),
+  update: (id: string, data: object) => api.patch(`/project-materials/${id}`, data),
+  delete: (id: string) => api.delete(`/project-materials/${id}`),
+  getProjects: (year?: number) =>
+    api.get<string[]>('/project-materials/projects', { params: { year } }).then(r => r.data),
+}
+
+export const movementRegisterApi = {
+  getAll: (params?: { status?: string; movementType?: string; date?: string }) =>
+    api.get<MovementRegister[]>('/movement-register', { params }).then(r => r.data),
+  get: (id: string) => api.get<MovementRegister>(`/movement-register/${id}`).then(r => r.data),
+  create: (data: object) => api.post<MovementRegister>('/movement-register', data).then(r => r.data),
+  close: (id: string, returnDateTime: string) =>
+    api.patch(`/movement-register/${id}/close`, { returnDateTime }),
 }
 
 export function downloadBlob(blob: Blob, filename: string) {

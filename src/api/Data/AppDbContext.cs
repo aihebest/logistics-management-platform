@@ -13,10 +13,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<FuelLog> FuelLogs => Set<FuelLog>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    // Phase 2
+    public DbSet<MaterialTransportRequest> MaterialTransportRequests => Set<MaterialTransportRequest>();
+    public DbSet<MaterialTransportItem> MaterialTransportItems => Set<MaterialTransportItem>();
+    public DbSet<DriverSchedule> DriverSchedules => Set<DriverSchedule>();
+    public DbSet<DriverIncident> DriverIncidents => Set<DriverIncident>();
+    // Phase 3
+    public DbSet<TravelRequest> TravelRequests => Set<TravelRequest>();
+    public DbSet<ProjectMaterialTracking> ProjectMaterialTrackings => Set<ProjectMaterialTracking>();
+    public DbSet<MovementRegister> MovementRegisters => Set<MovementRegister>();
 
     protected override void OnModelCreating(ModelBuilder mb)
     {
-        // ── Users ────────────────────────────────────────────────────────────
         mb.Entity<User>(e =>
         {
             e.HasKey(x => x.Id);
@@ -26,7 +34,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
         });
 
-        // ── Vehicles ─────────────────────────────────────────────────────────
         mb.Entity<Vehicle>(e =>
         {
             e.HasKey(x => x.Id);
@@ -40,7 +47,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .OnDelete(DeleteBehavior.SetNull);
         });
 
-        // ── TripRequests ──────────────────────────────────────────────────────
         mb.Entity<TripRequest>(e =>
         {
             e.HasKey(x => x.Id);
@@ -52,7 +58,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ── Assignments ───────────────────────────────────────────────────────
         mb.Entity<Assignment>(e =>
         {
             e.HasKey(x => x.Id);
@@ -76,29 +81,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ── MaintenanceRecords ────────────────────────────────────────────────
         mb.Entity<MaintenanceRecord>(e =>
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
             e.Property(x => x.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
-            e.Property(x => x.Cost).HasColumnType("decimal(10,2)");
             e.HasOne(x => x.Vehicle)
              .WithMany(v => v.MaintenanceRecords)
              .HasForeignKey(x => x.VehicleId)
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ── FuelLogs ──────────────────────────────────────────────────────────
         mb.Entity<FuelLog>(e =>
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
-            e.Property(x => x.LitresFilled).HasColumnType("decimal(8,2)");
-            e.Property(x => x.CostPerLitre).HasColumnType("decimal(8,4)");
-            e.Property(x => x.TotalCost).HasColumnType("decimal(10,2)");
+            e.Property(x => x.LitresFilled).HasColumnType("decimal(8,4)");
+            e.Property(x => x.CostPerLitre).HasColumnType("decimal(10,4)");
+            e.Property(x => x.TotalCost).HasColumnType("decimal(12,2)");
             e.HasOne(x => x.Vehicle)
              .WithMany(v => v.FuelLogs)
              .HasForeignKey(x => x.VehicleId)
@@ -109,16 +111,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ── AuditLogs ─────────────────────────────────────────────────────────
         mb.Entity<AuditLog>(e =>
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
             e.Property(x => x.Timestamp).HasDefaultValueSql("GETUTCDATE()");
-            // No FK constraints — denormalised for immutability
         });
 
-        // ── Notifications ─────────────────────────────────────────────────────
         mb.Entity<Notification>(e =>
         {
             e.HasKey(x => x.Id);
@@ -128,6 +127,91 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .WithMany(u => u.Notifications)
              .HasForeignKey(x => x.RecipientId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── Phase 2 ──────────────────────────────────────────────────────────
+        mb.Entity<MaterialTransportRequest>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.HasOne(x => x.RequestedBy).WithMany()
+             .HasForeignKey(x => x.RequestedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.HodApprovedBy).WithMany()
+             .HasForeignKey(x => x.HodApprovedById).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.ManagerApprovedBy).WithMany()
+             .HasForeignKey(x => x.ManagerApprovedById).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.AssignedDriver).WithMany()
+             .HasForeignKey(x => x.AssignedDriverId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.AssignedVehicle).WithMany()
+             .HasForeignKey(x => x.AssignedVehicleId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        mb.Entity<MaterialTransportItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.HasOne(x => x.Request)
+             .WithMany(r => r.Items)
+             .HasForeignKey(x => x.MaterialTransportRequestId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        mb.Entity<DriverSchedule>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.HasOne(x => x.Driver).WithMany()
+             .HasForeignKey(x => x.DriverId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.CreatedBy).WithMany()
+             .HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        mb.Entity<DriverIncident>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.HasOne(x => x.Driver).WithMany()
+             .HasForeignKey(x => x.DriverId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.ReportedBy).WithMany()
+             .HasForeignKey(x => x.ReportedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── Phase 3 ──────────────────────────────────────────────────────────
+        mb.Entity<TravelRequest>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.HasOne(x => x.RequestedBy).WithMany()
+             .HasForeignKey(x => x.RequestedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.ApprovedBy).WithMany()
+             .HasForeignKey(x => x.ApprovedById).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        mb.Entity<ProjectMaterialTracking>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.Property(x => x.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.HasOne(x => x.CreatedBy).WithMany()
+             .HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        mb.Entity<MovementRegister>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.HasOne(x => x.Vehicle).WithMany()
+             .HasForeignKey(x => x.VehicleId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Driver).WithMany()
+             .HasForeignKey(x => x.DriverId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.LoggedBy).WithMany()
+             .HasForeignKey(x => x.LoggedById).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

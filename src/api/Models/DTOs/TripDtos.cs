@@ -12,7 +12,11 @@ public record TripRequestDto(
     string Priority,
     string? Notes,
     DateTime CreatedAt,
-    AssignmentSummaryDto? Assignment
+    AssignmentSummaryDto? Assignment,
+    // Phase 1 fields
+    string MovementType,    // IntraState | Interstate | International
+    DateOnly? DepartureDate,
+    TimeOnly? DepartureTime
 );
 
 public record AssignmentSummaryDto(
@@ -30,7 +34,10 @@ public record CreateTripRequestDto(
     string DestinationLocation,
     DateTime RequestedDateTime,
     string Priority,
-    string? Notes
+    string? Notes,
+    string MovementType = "IntraState",
+    DateOnly? DepartureDate = null,
+    TimeOnly? DepartureTime = null
 );
 
 public record AssignmentDto(
@@ -63,4 +70,10 @@ public record OverrideAssignmentDto(
     Guid DriverId,
     Guid VehicleId,
     string? Notes
+);
+
+public record UpdateAssignmentStatusDto(
+    string Status,   // Active | Completed | Ongoing | Unattended | Cancelled
+    string? Notes,
+    DateTime? ActualEndTime
 );

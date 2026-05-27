@@ -14,6 +14,10 @@ public class Vehicle
     public DateOnly? LastServiceDate { get; set; }
     public DateOnly? NextServiceDate { get; set; }
     public Guid? AssignedMechanicId { get; set; }
+    // Phase 1 additions
+    public string? ChassisNo { get; set; }
+    public short? PurchaseYear { get; set; }
+    public string? Colour { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

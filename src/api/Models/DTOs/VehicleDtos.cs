@@ -12,7 +12,12 @@ public record VehicleDto(
     int ServiceIntervalKm,
     DateOnly? LastServiceDate,
     DateOnly? NextServiceDate,
-    string? AssignedMechanicName
+    string? AssignedMechanicName,
+    // Phase 1 lifecycle fields
+    string? ChassisNo,
+    short? PurchaseYear,
+    string? Colour,
+    int VehicleAge          // calculated: current year - Year
 );
 
 public record CreateVehicleDto(
@@ -22,7 +27,10 @@ public record CreateVehicleDto(
     short Year,
     string FuelType,
     int OdometerKm,
-    int ServiceIntervalKm
+    int ServiceIntervalKm,
+    string? ChassisNo = null,
+    short? PurchaseYear = null,
+    string? Colour = null
 );
 
 public record UpdateVehicleDto(
@@ -30,5 +38,8 @@ public record UpdateVehicleDto(
     int? OdometerKm,
     DateOnly? LastServiceDate,
     DateOnly? NextServiceDate,
-    Guid? AssignedMechanicId
+    Guid? AssignedMechanicId,
+    string? ChassisNo,
+    short? PurchaseYear,
+    string? Colour
 );

@@ -14,7 +14,9 @@ public class MaintenanceController(AppDbContext db) : ControllerBase
     [HttpGet]
     [Authorize(Roles = "Coordinator,Manager,Mechanic,Admin")]
     public async Task<IEnumerable<MaintenanceRecordDto>> GetAll(
-        [FromQuery] string? status, [FromQuery] Guid? vehicleId)
+        [FromQuery] string? status,
+        [FromQuery] Guid? vehicleId,
+        [FromQuery] string? category)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -32,7 +34,11 @@ public class MaintenanceController(AppDbContext db) : ControllerBase
             if (overdue.Any()) await db.SaveChangesAsync();
         }
 
-        if (vehicleId.HasValue) q = q.Where(m => m.VehicleId == vehicleId);
+        if (vehicleId.HasValue)
+            q = q.Where(m => m.VehicleId == vehicleId);
+
+        if (!string.IsNullOrEmpty(category))
+            q = q.Where(m => m.Category == category);
 
         return await q.OrderBy(m => m.ScheduledDate).Select(m => ToDto(m)).ToListAsync();
     }
@@ -43,6 +49,18 @@ public class MaintenanceController(AppDbContext db) : ControllerBase
     {
         var m = await db.MaintenanceRecords.Include(x => x.Vehicle).FirstOrDefaultAsync(x => x.Id == id);
         return m == null ? NotFound() : ToDto(m);
+    }
+
+    [HttpGet("vehicle/{vehicleId:guid}/history")]
+    [Authorize(Roles = "Coordinator,Manager,Mechanic,Admin")]
+    public async Task<IEnumerable<MaintenanceRecordDto>> GetHistory(Guid vehicleId)
+    {
+        return await db.MaintenanceRecords
+            .Include(m => m.Vehicle)
+            .Where(m => m.VehicleId == vehicleId)
+            .OrderByDescending(m => m.ScheduledDate)
+            .Select(m => ToDto(m))
+            .ToListAsync();
     }
 
     [HttpPost]
@@ -57,11 +75,17 @@ public class MaintenanceController(AppDbContext db) : ControllerBase
             Id = Guid.NewGuid(),
             VehicleId = dto.VehicleId,
             Type = dto.Type,
+            Category = dto.Category,
             ScheduledDate = dto.ScheduledDate,
             VendorName = dto.VendorName,
             VendorContact = dto.VendorContact,
             Notes = dto.Notes,
             Status = "Scheduled",
+            FaultReported = dto.FaultReported,
+            FaultDescription = dto.FaultDescription,
+            DateReported = dto.DateReported,
+            PartsReplaced = dto.PartsReplaced,
+            RepairRemarks = dto.RepairRemarks,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -95,6 +119,8 @@ public class MaintenanceController(AppDbContext db) : ControllerBase
         if (dto.VendorContact != null) record.VendorContact = dto.VendorContact;
         if (dto.Notes != null) record.Notes = dto.Notes;
         if (dto.AttachmentBlobUrl != null) record.AttachmentBlobUrl = dto.AttachmentBlobUrl;
+        if (dto.PartsReplaced != null) record.PartsReplaced = dto.PartsReplaced;
+        if (dto.RepairRemarks != null) record.RepairRemarks = dto.RepairRemarks;
         record.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
@@ -103,7 +129,11 @@ public class MaintenanceController(AppDbContext db) : ControllerBase
 
     private static MaintenanceRecordDto ToDto(Models.Entities.MaintenanceRecord m) => new(
         m.Id, m.VehicleId, m.Vehicle.RegistrationNo, m.Type,
+        m.Category ?? "Routine",
         m.ScheduledDate, m.CompletedDate, m.Cost,
         m.VendorName, m.VendorContact, m.Notes,
-        m.Status, m.AttachmentBlobUrl, m.CreatedAt);
+        m.Status, m.AttachmentBlobUrl,
+        m.FaultReported, m.FaultDescription, m.DateReported,
+        m.PartsReplaced, m.RepairRemarks,
+        m.CreatedAt);
 }
