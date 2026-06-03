@@ -17,13 +17,20 @@ public class FuelController(AppDbContext db) : ControllerBase
         [FromQuery] Guid? vehicleId,
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to,
-        [FromQuery] string? productType)
+        [FromQuery] string? productType,
+        [FromQuery] Guid? locationId)
     {
-        var q = db.FuelLogs.Include(f => f.Vehicle).Include(f => f.LoggedBy).AsQueryable();
-        if (vehicleId.HasValue) q = q.Where(f => f.VehicleId == vehicleId);
-        if (from.HasValue) q = q.Where(f => f.FuelDate >= from.Value);
-        if (to.HasValue) q = q.Where(f => f.FuelDate <= to.Value);
+        var q = db.FuelLogs
+            .Include(f => f.Vehicle)
+            .Include(f => f.LoggedBy)
+            .Include(f => f.Location)
+            .AsQueryable();
+
+        if (vehicleId.HasValue)   q = q.Where(f => f.VehicleId == vehicleId);
+        if (from.HasValue)        q = q.Where(f => f.FuelDate >= from.Value);
+        if (to.HasValue)          q = q.Where(f => f.FuelDate <= to.Value);
         if (!string.IsNullOrEmpty(productType)) q = q.Where(f => f.ProductType == productType);
+        if (locationId.HasValue)  q = q.Where(f => f.LocationId == locationId);
 
         return await q.OrderByDescending(f => f.FuelDate).Select(f => ToDto(f)).ToListAsync();
     }
@@ -40,7 +47,6 @@ public class FuelController(AppDbContext db) : ControllerBase
 
         var totalCost = dto.LitresFilled * dto.CostPerLitre;
 
-        // Auto-calculate mileage if odometer readings provided
         int? mileageCovered = null;
         if (dto.OdometerTo.HasValue && dto.OdometerFrom.HasValue && dto.OdometerTo > dto.OdometerFrom)
             mileageCovered = dto.OdometerTo.Value - dto.OdometerFrom.Value;
@@ -65,10 +71,10 @@ public class FuelController(AppDbContext db) : ControllerBase
             CostCentre = dto.CostCentre,
             StationName = dto.StationName,
             Notes = dto.Notes,
+            LocationId = dto.LocationId,
             CreatedAt = DateTime.UtcNow
         };
 
-        // Update vehicle odometer
         if (dto.OdometerAtFill > vehicle.OdometerKm)
         {
             vehicle.OdometerKm = dto.OdometerAtFill;
@@ -77,6 +83,11 @@ public class FuelController(AppDbContext db) : ControllerBase
 
         db.FuelLogs.Add(log);
         await db.SaveChangesAsync();
+
+        // Reload location name for response
+        if (log.LocationId.HasValue)
+            log.Location = await db.Locations.FindAsync(log.LocationId);
+
         log.Vehicle = vehicle;
         log.LoggedBy = caller;
 
@@ -93,5 +104,7 @@ public class FuelController(AppDbContext db) : ControllerBase
         f.OdometerAtFill,
         f.OdometerFrom, f.OdometerTo, f.MileageCovered,
         f.FuelGaugeBefore, f.FuelGaugeAfter,
-        f.CostCentre, f.StationName, f.ReceiptBlobUrl, f.Notes, f.CreatedAt);
+        f.CostCentre, f.StationName, f.ReceiptBlobUrl, f.Notes,
+        f.LocationId, f.Location?.Name,
+        f.CreatedAt);
 }

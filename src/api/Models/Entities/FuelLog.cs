@@ -6,7 +6,7 @@ public class FuelLog
     public Guid VehicleId { get; set; }
     public Guid LoggedById { get; set; }
     public DateOnly FuelDate { get; set; }
-    public string ProductType { get; set; } = "PMS";          // PMS | AGO | DPK | CNG
+    public string ProductType { get; set; } = "Petrol";        // Petrol | Diesel
     public string? CostCentre { get; set; }
     public decimal LitresFilled { get; set; }
     public decimal CostPerLitre { get; set; }
@@ -21,8 +21,10 @@ public class FuelLog
     public string? StationName { get; set; }
     public string? ReceiptBlobUrl { get; set; }
     public string? Notes { get; set; }
+    public Guid? LocationId { get; set; }              // Operational location (PH, Lagos, etc.)
     public DateTime CreatedAt { get; set; }
 
     public Vehicle Vehicle { get; set; } = null!;
     public User LoggedBy { get; set; } = null!;
+    public Location? Location { get; set; }
 }

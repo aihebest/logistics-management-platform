@@ -23,6 +23,7 @@ public class DriverScheduleController(AppDbContext db) : ControllerBase
         var q = db.DriverSchedules
             .Include(s => s.Driver)
             .Include(s => s.CreatedBy)
+            .Include(s => s.Location)
             .AsQueryable();
 
         if (driverId.HasValue) q = q.Where(s => s.DriverId == driverId);
@@ -46,6 +47,7 @@ public class DriverScheduleController(AppDbContext db) : ControllerBase
         return await db.DriverSchedules
             .Include(s => s.Driver)
             .Include(s => s.CreatedBy)
+            .Include(s => s.Location)
             .Where(s => s.ScheduleDate >= monday && s.ScheduleDate <= sunday)
             .OrderBy(s => s.ScheduleDate)
             .ThenBy(s => s.Driver.FullName)
@@ -75,7 +77,8 @@ public class DriverScheduleController(AppDbContext db) : ControllerBase
             Id = Guid.NewGuid(),
             DriverId = dto.DriverId,
             ScheduleDate = dto.ScheduleDate,
-            Location = dto.Location,
+            WorkLocation = dto.WorkLocation,
+            LocationId = dto.LocationId,
             Shift = dto.Shift,
             Notes = dto.Notes,
             CreatedById = caller.Id,
@@ -87,6 +90,9 @@ public class DriverScheduleController(AppDbContext db) : ControllerBase
 
         schedule.Driver = driver;
         schedule.CreatedBy = caller;
+        if (schedule.LocationId.HasValue)
+            schedule.Location = await db.Locations.FindAsync(schedule.LocationId);
+
         return CreatedAtAction(nameof(GetAll), new { id = schedule.Id }, ToDto(schedule));
     }
 
@@ -103,6 +109,7 @@ public class DriverScheduleController(AppDbContext db) : ControllerBase
 
     private static DriverScheduleDto ToDto(DriverSchedule s) => new(
         s.Id, s.DriverId, s.Driver?.FullName ?? "",
-        s.ScheduleDate, s.Location, s.Shift, s.Notes,
+        s.ScheduleDate, s.WorkLocation, s.LocationId, s.Location?.Name,
+        s.Shift, s.Notes,
         s.CreatedBy?.FullName ?? "", s.CreatedAt);
 }

@@ -1,17 +1,45 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { driverScheduleApi, driversApi } from '../../services/api'
+import { driverScheduleApi, driversApi, locationsApi } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
 import { format, addDays } from 'date-fns'
 
-const SHIFTS = ['Day', 'Night', 'Off', 'Leave']
+const SHIFTS = [
+  'Day Shift',
+  'Night Shift',
+  'Off Duty',
+  'Leave',
+  'Guest House Driver',
+  'Night Standby Driver',
+  'Expatriate Driver',
+  'Management Driver',
+  'Project Assignment Driver',
+]
+
 const SHIFT_COLOR: Record<string, string> = {
-  Day: 'bg-green-100 text-green-800',
-  Night: 'bg-indigo-100 text-indigo-800',
-  Off: 'bg-gray-100 text-gray-600',
-  Leave: 'bg-yellow-100 text-yellow-800',
+  'Day Shift':                'bg-green-100 text-green-800',
+  'Night Shift':              'bg-indigo-100 text-indigo-800',
+  'Off Duty':                 'bg-gray-100 text-gray-600',
+  'Leave':                    'bg-yellow-100 text-yellow-800',
+  'Guest House Driver':       'bg-purple-100 text-purple-800',
+  'Night Standby Driver':     'bg-blue-100 text-blue-800',
+  'Expatriate Driver':        'bg-orange-100 text-orange-800',
+  'Management Driver':        'bg-rose-100 text-rose-800',
+  'Project Assignment Driver':'bg-teal-100 text-teal-800',
+}
+
+const SHORT_LABEL: Record<string, string> = {
+  'Day Shift':                'Day',
+  'Night Shift':              'Night',
+  'Off Duty':                 'Off',
+  'Leave':                    'Leave',
+  'Guest House Driver':       'GH',
+  'Night Standby Driver':     'Standby',
+  'Expatriate Driver':        'Expat',
+  'Management Driver':        'Mgmt',
+  'Project Assignment Driver':'Project',
 }
 
 function getMonday(d: Date) {
@@ -34,10 +62,8 @@ export default function DriverSchedulePage() {
     queryFn: () => driverScheduleApi.getWeek(startDateStr),
   })
 
-  const { data: drivers = [] } = useQuery({
-    queryKey: ['drivers'],
-    queryFn: driversApi.getAll,
-  })
+  const { data: drivers = [] } = useQuery({ queryKey: ['drivers'], queryFn: driversApi.getAll })
+  const { data: locations = [] } = useQuery({ queryKey: ['locations'], queryFn: locationsApi.getAll })
 
   const createSchedule = useMutation({
     mutationFn: driverScheduleApi.create,
@@ -60,7 +86,8 @@ export default function DriverSchedulePage() {
     createSchedule.mutate({
       driverId: fd.get('driverId') as string,
       scheduleDate: fd.get('scheduleDate') as string,
-      location: fd.get('location') as string,
+      workLocation: fd.get('workLocation') as string,
+      locationId: fd.get('locationId') as string || undefined,
       shift: fd.get('shift') as string,
       notes: fd.get('notes') as string || undefined,
     })
@@ -79,7 +106,7 @@ export default function DriverSchedulePage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Driver Schedule</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setWeekStart(d => addDays(d, -7))} className="btn-secondary text-xs">← Prev Week</button>
           <span className="text-sm font-medium text-gray-700">
             {format(weekStart, 'dd MMM')} – {format(addDays(weekStart, 6), 'dd MMM yyyy')}
@@ -107,14 +134,21 @@ export default function DriverSchedulePage() {
               <input name="scheduleDate" type="date" className="input" required defaultValue={format(weekStart, 'yyyy-MM-dd')} />
             </div>
             <div>
-              <label className="label">Shift</label>
+              <label className="label">Assignment Category</label>
               <select name="shift" className="input">
                 {SHIFTS.map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
+            <div>
+              <label className="label">Location</label>
+              <select name="locationId" className="input">
+                <option value="">— Select location —</option>
+                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </div>
             <div className="md:col-span-2">
-              <label className="label">Location / Assignment</label>
-              <input name="location" className="input" required placeholder="e.g. Lagos Office, Port Harcourt Site" />
+              <label className="label">Deployment Detail</label>
+              <input name="workLocation" className="input" required placeholder="e.g. Head Office Reception, Site B Gate" />
             </div>
             <div>
               <label className="label">Notes</label>
@@ -164,9 +198,11 @@ export default function DriverSchedulePage() {
                         {sched ? (
                           <div className="group relative">
                             <span className={`px-2 py-1 rounded text-xs font-medium ${SHIFT_COLOR[sched.shift] ?? 'bg-gray-100 text-gray-700'}`}>
-                              {sched.shift}
+                              {SHORT_LABEL[sched.shift] ?? sched.shift}
                             </span>
-                            <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[100px] mx-auto">{sched.location}</p>
+                            <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[100px] mx-auto">
+                              {sched.locationName ?? sched.workLocation}
+                            </p>
                             {hasRole('Coordinator', 'Manager', 'Admin') && (
                               <button onClick={() => deleteSchedule.mutate(sched.id)}
                                 className="hidden group-hover:block absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs leading-4">
@@ -184,6 +220,18 @@ export default function DriverSchedulePage() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Shift legend */}
+      <div className="card p-3">
+        <p className="text-xs font-medium text-gray-500 mb-2 uppercase">Assignment Categories</p>
+        <div className="flex flex-wrap gap-2">
+          {SHIFTS.map(s => (
+            <span key={s} className={`px-2 py-0.5 rounded text-xs font-medium ${SHIFT_COLOR[s]}`}>
+              {s}
+            </span>
+          ))}
         </div>
       </div>
     </div>

@@ -7,8 +7,13 @@ public record DriverScheduleDto(
     Guid DriverId,
     string DriverName,
     DateOnly ScheduleDate,
-    string Location,
-    string Shift,       // Day | Night | Off | Leave
+    string WorkLocation,     // Freetext deployment location
+    Guid? LocationId,        // FK to Locations
+    string? LocationName,    // e.g. "Port Harcourt"
+    string Shift,
+    // Day Shift | Night Shift | Off Duty | Leave |
+    // Guest House Driver | Night Standby Driver | Expatriate Driver |
+    // Management Driver | Project Assignment Driver
     string? Notes,
     string CreatedByName,
     DateTime CreatedAt
@@ -17,9 +22,10 @@ public record DriverScheduleDto(
 public record CreateDriverScheduleDto(
     Guid DriverId,
     DateOnly ScheduleDate,
-    string Location,
+    string WorkLocation,
     string Shift,
-    string? Notes
+    string? Notes,
+    Guid? LocationId = null
 );
 
 // ── Driver Incidents ──────────────────────────────────────────────────────────

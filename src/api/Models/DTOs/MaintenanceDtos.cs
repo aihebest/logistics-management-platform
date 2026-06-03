@@ -76,6 +76,8 @@ public record FuelLogDto(
     string? StationName,
     string? ReceiptBlobUrl,
     string? Notes,
+    Guid? LocationId,
+    string? LocationName,
     DateTime CreatedAt
 );
 
@@ -93,5 +95,6 @@ public record CreateFuelLogDto(
     decimal? FuelGaugeAfter = null,
     string? CostCentre = null,
     string? StationName = null,
-    string? Notes = null
+    string? Notes = null,
+    Guid? LocationId = null
 );

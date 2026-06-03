@@ -30,8 +30,8 @@ public record CreateUserDto(
 // GET /api/auth/me reconciles their real Entra OID by matching on email.
 public record RegisterDriverDto(
     string FullName,
-    string Email,
     string? PhoneNumber = null,
     string? LicenceNo = null,
-    DateOnly? LicenceExpiry = null
+    DateOnly? LicenceExpiry = null,
+    string? Email = null   // Optional — only needed if driver will log in via Microsoft account
 );

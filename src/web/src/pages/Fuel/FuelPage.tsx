@@ -1,24 +1,33 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fuelApi, vehiclesApi } from '../../services/api'
+import { fuelApi, vehiclesApi, locationsApi } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
-const PRODUCT_TYPES = ['PMS', 'AGO', 'DPK', 'CNG']
+const PRODUCT_TYPES = ['Petrol', 'Diesel']
 
 export default function FuelPage() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [productFilter, setProductFilter] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
 
   const { data: logs = [], isLoading } = useQuery({
-    queryKey: ['fuel', productFilter],
-    queryFn: () => fuelApi.getAll({ productType: productFilter || undefined }),
+    queryKey: ['fuel', productFilter, locationFilter],
+    queryFn: () => fuelApi.getAll({
+      productType: productFilter || undefined,
+      locationId: locationFilter || undefined,
+    }),
   })
 
   const { data: vehicles = [] } = useQuery({
     queryKey: ['vehicles'],
     queryFn: () => vehiclesApi.getAll(),
+  })
+
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations'],
+    queryFn: locationsApi.getAll,
   })
 
   const createLog = useMutation({
@@ -51,11 +60,21 @@ export default function FuelPage() {
       costCentre: fd.get('costCentre') as string || undefined,
       stationName: fd.get('stationName') as string || undefined,
       notes: fd.get('notes') as string || undefined,
+      locationId: fd.get('locationId') as string || undefined,
     })
   }
 
   const totalCost = logs.reduce((s, l) => s + l.totalCost, 0)
   const totalLitres = logs.reduce((s, l) => s + l.litresFilled, 0)
+
+  // Per-location summary
+  const byLocation = locations.map(loc => ({
+    name: loc.name,
+    code: loc.code,
+    litres: logs.filter(l => l.locationId === loc.id).reduce((s, l) => s + l.litresFilled, 0),
+    cost: logs.filter(l => l.locationId === loc.id).reduce((s, l) => s + l.totalCost, 0),
+    count: logs.filter(l => l.locationId === loc.id).length,
+  })).filter(l => l.count > 0)
 
   if (isLoading) return <PageLoader />
 
@@ -63,7 +82,11 @@ export default function FuelPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Fuel Logs</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <select value={locationFilter} onChange={e => setLocationFilter(e.target.value)} className="input w-auto">
+            <option value="">All Locations</option>
+            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
           <select value={productFilter} onChange={e => setProductFilter(e.target.value)} className="input w-auto">
             <option value="">All Products</option>
             {PRODUCT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -89,10 +112,27 @@ export default function FuelPage() {
         <div className="card p-4 text-center">
           <p className="text-xs text-gray-500 uppercase">Avg Cost/Litre</p>
           <p className="text-2xl font-bold text-gray-700">
-            ₦{logs.length ? (totalCost / totalLitres).toFixed(0) : '0'}
+            ₦{logs.length && totalLitres > 0 ? (totalCost / totalLitres).toFixed(0) : '0'}
           </p>
         </div>
       </div>
+
+      {/* Per-location breakdown — shown only when viewing all locations */}
+      {!locationFilter && byLocation.length > 1 && (
+        <div className="card p-4">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Consumption by Location</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {byLocation.map(loc => (
+              <div key={loc.code} className="bg-gray-50 rounded-lg p-3 text-center">
+                <p className="text-xs font-bold text-brand-600 uppercase">{loc.code}</p>
+                <p className="text-sm font-semibold text-gray-900 mt-1">{loc.litres.toFixed(0)}L</p>
+                <p className="text-xs text-gray-500">₦{loc.cost.toLocaleString()}</p>
+                <p className="text-xs text-gray-400">{loc.count} entries</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="card p-5">
@@ -108,6 +148,13 @@ export default function FuelPage() {
               </select>
             </div>
             <div>
+              <label className="label">Location <span className="text-red-500">*</span></label>
+              <select name="locationId" className="input" required>
+                <option value="">Select location…</option>
+                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="label">Fuel Date</label>
               <input name="fuelDate" type="date" className="input" required defaultValue={new Date().toISOString().split('T')[0]} />
             </div>
@@ -119,9 +166,9 @@ export default function FuelPage() {
             </div>
             <div><label className="label">Litres Filled</label><input name="litresFilled" type="number" step="0.01" className="input" required /></div>
             <div><label className="label">Cost per Litre (₦)</label><input name="costPerLitre" type="number" step="0.01" className="input" required /></div>
-            <div><label className="label">Odometer at Fill (km)</label><input name="odometerAtFill" type="number" className="input" required /></div>
-            <div><label className="label">Odometer From (km)</label><input name="odometerFrom" type="number" className="input" placeholder="Previous reading" /></div>
-            <div><label className="label">Odometer To (km)</label><input name="odometerTo" type="number" className="input" placeholder="Current reading" /></div>
+            <div><label className="label">Current Mileage (km)</label><input name="odometerAtFill" type="number" className="input" required /></div>
+            <div><label className="label">Mileage From (km)</label><input name="odometerFrom" type="number" className="input" placeholder="Previous reading" /></div>
+            <div><label className="label">Mileage To (km)</label><input name="odometerTo" type="number" className="input" placeholder="Current reading" /></div>
             <div><label className="label">Fuel Gauge Before (%)</label><input name="fuelGaugeBefore" type="number" min={0} max={100} className="input" /></div>
             <div><label className="label">Fuel Gauge After (%)</label><input name="fuelGaugeAfter" type="number" min={0} max={100} className="input" /></div>
             <div><label className="label">Cost Centre</label><input name="costCentre" className="input" placeholder="e.g. Project Alpha" /></div>
@@ -144,7 +191,7 @@ export default function FuelPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {['Date', 'Vehicle', 'Product', 'Litres', 'Rate (₦)', 'Total (₦)', 'Odometer', 'Mileage', 'Cost Centre', 'Payment', 'Logged By'].map(h => (
+                {['Date', 'Vehicle', 'Location', 'Product', 'Litres', 'Rate (₦)', 'Total (₦)', 'Mileage', 'Payment', 'Logged By'].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                 ))}
               </tr>
@@ -155,16 +202,19 @@ export default function FuelPage() {
                   <td className="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">{l.fuelDate}</td>
                   <td className="px-3 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{l.vehicleReg}</td>
                   <td className="px-3 py-3 text-sm">
+                    {l.locationName
+                      ? <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium">{l.locationName}</span>
+                      : <span className="text-gray-400">—</span>}
+                  </td>
+                  <td className="px-3 py-3 text-sm">
                     <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium">{l.productType}</span>
                   </td>
                   <td className="px-3 py-3 text-sm text-gray-700">{l.litresFilled.toFixed(1)}L</td>
                   <td className="px-3 py-3 text-sm text-gray-700">₦{l.costPerLitre.toLocaleString()}</td>
                   <td className="px-3 py-3 text-sm font-medium text-gray-900">₦{l.totalCost.toLocaleString()}</td>
-                  <td className="px-3 py-3 text-sm text-gray-500">{l.odometerAtFill.toLocaleString()} km</td>
                   <td className="px-3 py-3 text-sm text-gray-500">
-                    {l.mileageCovered != null ? `${l.mileageCovered.toLocaleString()} km` : '—'}
+                    {l.mileageCovered != null ? `${l.mileageCovered.toLocaleString()} km` : l.odometerAtFill ? `${l.odometerAtFill.toLocaleString()} km` : '—'}
                   </td>
-                  <td className="px-3 py-3 text-sm text-gray-500">{l.costCentre || '—'}</td>
                   <td className="px-3 py-3 text-sm">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${l.isCashPayment ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
                       {l.isCashPayment ? 'Cash' : 'Card/Transfer'}
@@ -174,7 +224,7 @@ export default function FuelPage() {
                 </tr>
               ))}
               {logs.length === 0 && (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-gray-400">No fuel logs found</td></tr>
+                <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400">No fuel logs found</td></tr>
               )}
             </tbody>
           </table>

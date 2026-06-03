@@ -66,9 +66,11 @@ public class MovementRegisterController(AppDbContext db) : ControllerBase
             Origin = dto.Origin,
             Destination = dto.Destination,
             MovementDateTime = dto.MovementDateTime,
+            MileageOut = dto.MileageOut,
+            MileageIn = dto.MileageIn,
             ReturnDateTime = dto.ReturnDateTime,
             GatePassNo = dto.GatePassNo,
-            Status = "Open",
+            Status = dto.ReturnDateTime.HasValue ? "Closed" : "Open",
             LoggedById = caller.Id,
             CreatedAt = DateTime.UtcNow
         };
@@ -88,6 +90,7 @@ public class MovementRegisterController(AppDbContext db) : ControllerBase
         if (entry == null) return NotFound();
 
         entry.ReturnDateTime = dto.ReturnDateTime;
+        if (dto.MileageIn.HasValue) entry.MileageIn = dto.MileageIn;
         entry.Status = "Closed";
         await db.SaveChangesAsync();
         return NoContent();
@@ -114,6 +117,8 @@ public class MovementRegisterController(AppDbContext db) : ControllerBase
         r.Destination ?? string.Empty,
         r.MovementDateTime,
         r.ReturnDateTime,
+        r.MileageOut,
+        r.MileageIn,
         r.GatePassNo,
         r.Status,
         r.LoggedBy?.FullName ?? "",

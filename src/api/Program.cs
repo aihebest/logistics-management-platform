@@ -119,12 +119,16 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-// ── Auto-migrate on startup (dev / Docker only) ───────────────────────────────
+// ── Auto-migrate and seed on startup (dev / Docker only) ─────────────────────
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Docker"))
 {
     using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var db     = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var cfg    = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
     db.Database.Migrate();
+    await LogisticsApi.Data.DatabaseSeeder.SeedAsync(db, cfg, logger);
 }
 
 // ── Middleware pipeline ───────────────────────────────────────────────────────

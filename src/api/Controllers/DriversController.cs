@@ -18,16 +18,16 @@ public class DriversController(AppDbContext db, IAuditService audit) : Controlle
     [Authorize(Roles = "Manager,Admin")]
     public async Task<ActionResult<UserDto>> Register(RegisterDriverDto dto)
     {
-        if (await db.Users.AnyAsync(u => u.Email == dto.Email))
+        var emailNorm = dto.Email?.ToLowerInvariant().Trim() ?? string.Empty;
+        if (!string.IsNullOrEmpty(emailNorm) && await db.Users.AnyAsync(u => u.Email == emailNorm))
             return Conflict(new { error = "A user with this email already exists." });
 
         var driver = new Models.Entities.User
         {
             Id = Guid.NewGuid(),
-            // Placeholder OID — replaced when the driver first logs in via Entra ID
             EntraObjectId = $"pre-{Guid.NewGuid():N}",
             FullName = dto.FullName,
-            Email = dto.Email.ToLowerInvariant().Trim(),
+            Email = emailNorm,
             PhoneNumber = dto.PhoneNumber,
             Role = "Driver",
             DriverStatus = "OffDuty",

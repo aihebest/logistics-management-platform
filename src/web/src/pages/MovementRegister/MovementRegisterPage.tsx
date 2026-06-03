@@ -42,8 +42,8 @@ export default function MovementRegisterPage() {
   })
 
   const closeMovement = useMutation({
-    mutationFn: ({ id, returnDateTime }: { id: string; returnDateTime: string }) =>
-      movementRegisterApi.close(id, returnDateTime),
+    mutationFn: ({ id, returnDateTime, mileageIn }: { id: string; returnDateTime: string; mileageIn?: number }) =>
+      movementRegisterApi.close(id, returnDateTime, mileageIn),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['movement-register'] }); setClosingId(null); toast.success('Movement closed') },
   })
 
@@ -52,6 +52,9 @@ export default function MovementRegisterPage() {
     const fd = new FormData(e.currentTarget)
     const vehicleId = fd.get('vehicleId') as string
     const driverId = fd.get('driverId') as string
+    const mileageOutRaw = fd.get('mileageOut') as string
+    const mileageInRaw = fd.get('mileageIn') as string
+    const returnDtRaw = fd.get('returnDateTime') as string
     createMovement.mutate({
       movementType: fd.get('movementType') as string,
       vehicleId: vehicleId || undefined,
@@ -61,6 +64,9 @@ export default function MovementRegisterPage() {
       origin: fd.get('origin') as string,
       destination: fd.get('destination') as string,
       movementDateTime: fd.get('movementDateTime') as string,
+      mileageOut: mileageOutRaw ? Number(mileageOutRaw) : undefined,
+      mileageIn: mileageInRaw ? Number(mileageInRaw) : undefined,
+      returnDateTime: returnDtRaw || undefined,
       gatePassNo: fd.get('gatePassNo') as string || undefined,
     })
   }
@@ -120,11 +126,14 @@ export default function MovementRegisterPage() {
               <label className="label">Purpose</label>
               <input name="purpose" className="input" required placeholder="e.g. Material delivery to site, Staff pickup" />
             </div>
-            <div><label className="label">Origin</label><input name="origin" className="input" required /></div>
+            <div><label className="label">Departure Location</label><input name="origin" className="input" required /></div>
             <div><label className="label">Destination</label><input name="destination" className="input" required /></div>
-            <div><label className="label">Movement Date & Time</label><input name="movementDateTime" type="datetime-local" className="input" required defaultValue={new Date().toISOString().slice(0, 16)} /></div>
-            <div><label className="label">Related Ref No</label><input name="relatedRefNo" className="input" placeholder="Trip / Form no" /></div>
+            <div><label className="label">Time Out <span className="text-red-500">*</span></label><input name="movementDateTime" type="datetime-local" className="input" required defaultValue={new Date().toISOString().slice(0, 16)} /></div>
+            <div><label className="label">Time In <span className="text-gray-400 font-normal text-xs">(if already returned)</span></label><input name="returnDateTime" type="datetime-local" className="input" /></div>
+            <div><label className="label">Mileage Out (km)</label><input name="mileageOut" type="number" className="input" placeholder="Odometer at departure" /></div>
+            <div><label className="label">Mileage In (km)</label><input name="mileageIn" type="number" className="input" placeholder="Odometer at return" /></div>
             <div><label className="label">Gate Pass No</label><input name="gatePassNo" className="input" /></div>
+            <div><label className="label">Related Ref No</label><input name="relatedRefNo" className="input" placeholder="Trip / Form no" /></div>
             <div className="md:col-span-3 flex gap-3">
               <button type="submit" className="btn-primary" disabled={createMovement.isPending}>Log Movement</button>
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
@@ -138,7 +147,7 @@ export default function MovementRegisterPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['Type', 'Purpose', 'Vehicle', 'Driver', 'From', 'To', 'Moved Out', 'Returned', 'Ref No', 'Status', 'Actions'].map(h => (
+                {['Type', 'Vehicle', 'Driver', 'Purpose', 'From', 'To', 'Time Out', 'Mileage Out', 'Time In', 'Mileage In', 'Status', 'Actions'].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -151,18 +160,23 @@ export default function MovementRegisterPage() {
                       {MOVEMENT_TYPES.find(t => t.value === m.movementType)?.label ?? m.movementType}
                     </span>
                   </td>
-                  <td className="px-3 py-2 max-w-xs truncate text-gray-900" title={m.purpose}>{m.purpose}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-700 font-medium">{m.vehicleReg || '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.driverName || '—'}</td>
+                  <td className="px-3 py-2 max-w-[180px] truncate text-gray-900" title={m.purpose}>{m.purpose}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.origin}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.destination}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-500">
                     {format(new Date(m.movementDateTime), 'dd MMM HH:mm')}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-500">
+                    {m.mileageOut != null ? `${m.mileageOut.toLocaleString()} km` : '—'}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-500">
                     {m.returnDateTime ? format(new Date(m.returnDateTime), 'dd MMM HH:mm') : '—'}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-500">{m.relatedRefNo || '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-500">
+                    {m.mileageIn != null ? `${m.mileageIn.toLocaleString()} km` : '—'}
+                  </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${m.status === 'Open' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
                       {m.status}
@@ -171,33 +185,30 @@ export default function MovementRegisterPage() {
                   <td className="px-3 py-2 whitespace-nowrap">
                     {hasRole('Coordinator', 'Manager', 'Admin') && m.status === 'Open' && (
                       closingId === m.id ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="datetime-local"
-                            id={`return-${m.id}`}
-                            className="input text-xs py-1"
-                            defaultValue={new Date().toISOString().slice(0, 16)}
-                          />
-                          <button
-                            className="text-xs px-2 py-1 bg-green-600 text-white rounded"
-                            onClick={() => {
-                              const val = (document.getElementById(`return-${m.id}`) as HTMLInputElement).value
-                              closeMovement.mutate({ id: m.id, returnDateTime: val })
-                            }}
-                          >Save</button>
-                          <button className="text-xs text-gray-400" onClick={() => setClosingId(null)}>✕</button>
+                        <div className="flex flex-col gap-1 min-w-[220px]">
+                          <input type="datetime-local" id={`return-${m.id}`} className="input text-xs py-1" defaultValue={new Date().toISOString().slice(0, 16)} />
+                          <input type="number" id={`mileage-in-${m.id}`} className="input text-xs py-1" placeholder="Mileage In (km)" />
+                          <div className="flex gap-1">
+                            <button
+                              className="text-xs px-2 py-1 bg-green-600 text-white rounded"
+                              onClick={() => {
+                                const val = (document.getElementById(`return-${m.id}`) as HTMLInputElement).value
+                                const mi = (document.getElementById(`mileage-in-${m.id}`) as HTMLInputElement).value
+                                closeMovement.mutate({ id: m.id, returnDateTime: val, mileageIn: mi ? Number(mi) : undefined })
+                              }}
+                            >Save</button>
+                            <button className="text-xs text-gray-400" onClick={() => setClosingId(null)}>✕</button>
+                          </div>
                         </div>
                       ) : (
-                        <button className="btn-secondary text-xs" onClick={() => setClosingId(m.id)}>
-                          Close
-                        </button>
+                        <button className="btn-secondary text-xs" onClick={() => setClosingId(m.id)}>Close</button>
                       )
                     )}
                   </td>
                 </tr>
               ))}
               {movements.length === 0 && (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-gray-400">No movement records found</td></tr>
+                <tr><td colSpan={12} className="px-4 py-12 text-center text-gray-400">No movement records found</td></tr>
               )}
             </tbody>
           </table>

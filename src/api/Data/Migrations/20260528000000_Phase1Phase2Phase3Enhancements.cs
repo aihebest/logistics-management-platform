@@ -16,6 +16,20 @@ namespace LogisticsApi.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // ── Locations table (reference data) ─────────────────────────────
+            migrationBuilder.CreateTable(
+                name: "Locations",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(nullable: false, defaultValueSql: "NEWSEQUENTIALID()"),
+                    Name = table.Column<string>(maxLength: 200, nullable: false),
+                    Code = table.Column<string>(maxLength: 20, nullable: false),
+                    IsActive = table.Column<bool>(nullable: false, defaultValue: true),
+                    CreatedAt = table.Column<DateTime>(nullable: false, defaultValueSql: "GETUTCDATE()"),
+                },
+                constraints: table => table.PrimaryKey("PK_Locations", x => x.Id));
+            migrationBuilder.CreateIndex("IX_Locations_Code", "Locations", "Code", unique: true);
+
             // ── Phase 1: Vehicle additions ────────────────────────────────────
             migrationBuilder.AddColumn<string>("ChassisNo", "Vehicles", maxLength: 100, nullable: true);
             migrationBuilder.AddColumn<short>("PurchaseYear", "Vehicles", nullable: true);

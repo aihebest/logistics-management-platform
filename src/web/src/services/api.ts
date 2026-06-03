@@ -25,6 +25,13 @@ api.interceptors.request.use(async config => {
 
 // ── Core Types ────────────────────────────────────────────────────────────────
 
+export interface Location {
+  id: string
+  name: string
+  code: string
+  isActive: boolean
+}
+
 export interface User {
   id: string
   fullName: string
@@ -146,6 +153,8 @@ export interface FuelLog {
   stationName?: string
   receiptBlobUrl?: string
   notes?: string
+  locationId?: string
+  locationName?: string
   createdAt: string
 }
 
@@ -218,8 +227,10 @@ export interface DriverSchedule {
   driverId: string
   driverName: string
   scheduleDate: string
-  location: string
-  shift: string               // Day | Night | Off | Leave
+  workLocation: string
+  locationId?: string
+  locationName?: string
+  shift: string
   notes?: string
   createdByName: string
   createdAt: string
@@ -308,10 +319,12 @@ export interface MovementRegister {
   driverName?: string
   relatedRefNo?: string
   purpose: string
-  origin: string
+  origin: string              // Departure location
   destination: string
-  movementDateTime: string
-  returnDateTime?: string
+  movementDateTime: string    // Time Out
+  returnDateTime?: string     // Time In
+  mileageOut?: number
+  mileageIn?: number
   gatePassNo?: string
   status: string              // Open | Closed
   loggedByName: string
@@ -383,7 +396,7 @@ export const maintenanceApi = {
 }
 
 export const fuelApi = {
-  getAll: (params?: { vehicleId?: string; from?: string; to?: string; productType?: string }) =>
+  getAll: (params?: { vehicleId?: string; from?: string; to?: string; productType?: string; locationId?: string }) =>
     api.get<FuelLog[]>('/fuel', { params }).then(r => r.data),
   create: (data: object) => api.post<FuelLog>('/fuel', data).then(r => r.data),
 }
@@ -419,6 +432,10 @@ export const materialTransportApi = {
     api.post(`/material-transport/${id}/manager-approval`, { action, remarks }),
   assign: (id: string, driverId: string, vehicleId: string) =>
     api.post(`/material-transport/${id}/assign`, { driverId, vehicleId }),
+}
+
+export const locationsApi = {
+  getAll: () => api.get<Location[]>('/locations').then(r => r.data),
 }
 
 export const driverScheduleApi = {
@@ -465,8 +482,8 @@ export const movementRegisterApi = {
     api.get<MovementRegister[]>('/movement-register', { params }).then(r => r.data),
   get: (id: string) => api.get<MovementRegister>(`/movement-register/${id}`).then(r => r.data),
   create: (data: object) => api.post<MovementRegister>('/movement-register', data).then(r => r.data),
-  close: (id: string, returnDateTime: string) =>
-    api.patch(`/movement-register/${id}/close`, { returnDateTime }),
+  close: (id: string, returnDateTime: string, mileageIn?: number) =>
+    api.patch(`/movement-register/${id}/close`, { returnDateTime, mileageIn }),
 }
 
 export function downloadBlob(blob: Blob, filename: string) {

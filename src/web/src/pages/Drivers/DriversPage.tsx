@@ -82,12 +82,12 @@ export default function DriversPage() {
             </p>
           </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div className="col-span-2 md:col-span-1">
+            <div>
               <label className="label">Full Name <span className="text-red-500">*</span></label>
               <input name="fullName" className="input" placeholder="e.g. Kwame Asante" required />
             </div>
-            <div className="col-span-2 md:col-span-1">
-              <label className="label">Email Address <span className="text-red-500">*</span></label>
+            <div>
+              <label className="label">Email <span className="text-red-500">*</span></label>
               <input name="email" type="email" className="input" placeholder="e.g. k.asante@company.com" required />
             </div>
             <div>
@@ -120,7 +120,7 @@ export default function DriversPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {['Name', 'Email', 'Phone', 'Status', 'Licence No', 'Licence Expiry', ''].map(h => (
+                {['Name', 'Phone', 'Status', 'Licence No', 'Licence Expiry', ''].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {h}
                   </th>
@@ -138,7 +138,6 @@ export default function DriversPage() {
                       <span className="text-sm font-medium text-gray-900">{driver.fullName}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{driver.email}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{driver.phoneNumber ?? '—'}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <StatusBadge status={driver.driverStatus ?? 'Unknown'} />
@@ -170,7 +169,7 @@ export default function DriversPage() {
               ))}
               {drivers.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
                     No drivers registered yet.{' '}
                     {hasRole('Manager', 'Admin') && (
                       <button className="text-brand-600 hover:underline" onClick={() => setShowForm(true)}>

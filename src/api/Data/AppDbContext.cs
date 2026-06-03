@@ -6,6 +6,7 @@ namespace LogisticsApi.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<Location> Locations => Set<Location>();
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<TripRequest> TripRequests => Set<TripRequest>();
     public DbSet<Assignment> Assignments => Set<Assignment>();
@@ -25,6 +26,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder mb)
     {
+        mb.Entity<Location>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.HasIndex(x => x.Code).IsUnique();
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+        });
+
         mb.Entity<User>(e =>
         {
             e.HasKey(x => x.Id);
@@ -109,6 +118,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .WithMany(u => u.FuelLogs)
              .HasForeignKey(x => x.LoggedById)
              .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Location).WithMany()
+             .HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.SetNull);
         });
 
         mb.Entity<AuditLog>(e =>
@@ -166,6 +177,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .HasForeignKey(x => x.DriverId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.CreatedBy).WithMany()
              .HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Location).WithMany()
+             .HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.SetNull);
         });
 
         mb.Entity<DriverIncident>(e =>

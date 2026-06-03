@@ -10,8 +10,10 @@ public class MovementRegister
     public string Purpose { get; set; } = string.Empty;
     public string? Origin { get; set; }
     public string? Destination { get; set; }
-    public DateTime MovementDateTime { get; set; }
-    public DateTime? ReturnDateTime { get; set; }
+    public DateTime MovementDateTime { get; set; }            // Time Out
+    public DateTime? ReturnDateTime { get; set; }              // Time In
+    public int? MileageOut { get; set; }                       // Odometer reading at departure
+    public int? MileageIn { get; set; }                        // Odometer reading at return
     public string? GatePassNo { get; set; }
     public string Status { get; set; } = "Open";              // Open | Closed
     public string? Notes { get; set; }

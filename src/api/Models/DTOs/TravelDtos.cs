@@ -107,10 +107,12 @@ public record MovementRegisterDto(
     string? DriverName,
     string? RelatedRefNo,
     string Purpose,
-    string Origin,
+    string Origin,         // Departure location
     string Destination,
-    DateTime MovementDateTime,
-    DateTime? ReturnDateTime,
+    DateTime MovementDateTime,   // Time Out
+    DateTime? ReturnDateTime,    // Time In
+    int? MileageOut,       // Odometer at departure
+    int? MileageIn,        // Odometer at return
     string? GatePassNo,
     string Status,         // Open | Closed
     string LoggedByName,
@@ -126,11 +128,14 @@ public record CreateMovementRegisterDto(
     string Origin,
     string Destination,
     DateTime MovementDateTime,
+    int? MileageOut = null,
+    int? MileageIn = null,
     DateTime? ReturnDateTime = null,
     string? GatePassNo = null
 );
 
 public record CloseMovementDto(
     DateTime ReturnDateTime,
+    int? MileageIn,
     string? Notes
 );
