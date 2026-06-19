@@ -1,10 +1,15 @@
 using System;
+using LogisticsApi.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace LogisticsApi.Data.Migrations
 {
+    [Migration("20260602000000_LocationsAndMovementEnhancements")]
+    [DbContext(typeof(AppDbContext))]
     /// <inheritdoc />
     public partial class LocationsAndMovementEnhancements : Migration
     {

@@ -340,7 +340,7 @@ export const driversApi = {
   get: (id: string) => api.get<User>(`/drivers/${id}`).then(r => r.data),
   register: (data: {
     fullName: string
-    email: string
+    email?: string
     phoneNumber?: string
     licenceNo?: string
     licenceExpiry?: string

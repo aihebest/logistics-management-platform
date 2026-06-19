@@ -1,9 +1,14 @@
+using LogisticsApi.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace LogisticsApi.Data.Migrations
 {
+    [Migration("20260619000000_VehicleMileageFields")]
+    [DbContext(typeof(AppDbContext))]
     /// <inheritdoc />
     public partial class VehicleMileageFields : Migration
     {
