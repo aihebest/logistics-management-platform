@@ -51,6 +51,43 @@ public class NotificationsController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Broadcast a maintenance/dept notification to all Managers, Coordinators, and Admins.
+    /// Used by the "Notify Departments" workflow in the Maintenance module.
+    /// </summary>
+    [HttpPost("broadcast")]
+    [Authorize(Roles = "Coordinator,Manager,Admin,Mechanic")]
+    public async Task<IActionResult> Broadcast(BroadcastNotificationDto dto)
+    {
+        // Target: all active Managers, Coordinators, and Admins
+        var recipients = await db.Users
+            .Where(u => u.IsActive && (u.Role == "Manager" || u.Role == "Coordinator" || u.Role == "Admin"))
+            .Select(u => u.Id)
+            .ToListAsync();
+
+        if (recipients.Count == 0) return Ok(new { sent = 0 });
+
+        var now = DateTime.UtcNow;
+        var notifications = recipients.Select(recipientId => new Models.Entities.Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientId = recipientId,
+            Type = dto.Type,
+            Subject = dto.Title,
+            Body = dto.Message,
+            IsRead = false,
+            Status = "Delivered",
+            SentAt = now,
+            RelatedEntityType = "Maintenance",
+            CreatedAt = now,
+        });
+
+        db.Notifications.AddRange(notifications);
+        await db.SaveChangesAsync();
+
+        return Ok(new { sent = recipients.Count });
+    }
+
     private static NotificationDto ToDto(Models.Entities.Notification n) => new(
         n.Id, n.Type, n.Subject, n.Body, n.IsRead, n.Status,
         n.SentAt, n.RelatedEntityType, n.RelatedEntityId, n.CreatedAt);

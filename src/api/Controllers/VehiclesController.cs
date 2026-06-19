@@ -50,6 +50,8 @@ public class VehiclesController(AppDbContext db) : ControllerBase
             Year = dto.Year,
             FuelType = dto.FuelType,
             OdometerKm = dto.OdometerKm,
+            MileageAtPurchase = dto.MileageAtPurchase,
+            PreviousMileageAtPurchase = dto.PreviousMileageAtPurchase,
             ServiceIntervalKm = dto.ServiceIntervalKm,
             ChassisNo = dto.ChassisNo,
             PurchaseYear = dto.PurchaseYear,
@@ -86,7 +88,8 @@ public class VehiclesController(AppDbContext db) : ControllerBase
 
     private static VehicleDto ToDto(Models.Entities.Vehicle v) => new(
         v.Id, v.RegistrationNo, v.Make, v.Model, v.Year, v.Status, v.FuelType,
-        v.OdometerKm, v.ServiceIntervalKm, v.LastServiceDate, v.NextServiceDate,
+        v.OdometerKm, v.MileageAtPurchase, v.PreviousMileageAtPurchase,
+        v.ServiceIntervalKm, v.LastServiceDate, v.NextServiceDate,
         v.AssignedMechanic?.FullName,
         v.ChassisNo, v.PurchaseYear, v.Colour,
         DateTime.UtcNow.Year - v.Year);

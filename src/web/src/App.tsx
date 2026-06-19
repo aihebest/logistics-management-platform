@@ -15,8 +15,7 @@ import NotificationsPage from './pages/Notifications/NotificationsPage'
 import MaterialTransportPage from './pages/MaterialTransport/MaterialTransportPage'
 import DriverPerformancePage from './pages/DriverPerformance/DriverPerformancePage'
 import DriverSchedulePage from './pages/DriverSchedule/DriverSchedulePage'
-// Phase 3
-import TravelRequestPage from './pages/Travel/TravelRequestPage'
+// Phase 3 (Travel & Accommodation reserved for future separate module)
 import ProjectMaterialsPage from './pages/ProjectMaterials/ProjectMaterialsPage'
 import MovementRegisterPage from './pages/MovementRegister/MovementRegisterPage'
 
@@ -44,8 +43,7 @@ export default function App() {
               <Route path="/material-transport" element={<MaterialTransportPage />} />
               <Route path="/driver-performance" element={<DriverPerformancePage />} />
               <Route path="/driver-schedule" element={<DriverSchedulePage />} />
-              {/* Phase 3 */}
-              <Route path="/travel" element={<TravelRequestPage />} />
+              {/* Phase 3 (Travel reserved for future) */}
               <Route path="/project-materials" element={<ProjectMaterialsPage />} />
               <Route path="/movement-register" element={<MovementRegisterPage />} />
             </Routes>

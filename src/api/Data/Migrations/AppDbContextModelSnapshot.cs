@@ -168,6 +168,8 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<string>("Model").IsRequired().HasMaxLength(50).HasColumnType("nvarchar(50)");
                 b.Property<DateOnly?>("NextServiceDate").HasColumnType("date");
                 b.Property<int>("OdometerKm").HasColumnType("int");
+                b.Property<int?>("MileageAtPurchase").HasColumnType("int");
+                b.Property<int?>("PreviousMileageAtPurchase").HasColumnType("int");
                 b.Property<string>("RegistrationNo").IsRequired().HasMaxLength(20).HasColumnType("nvarchar(20)");
                 b.Property<int>("ServiceIntervalKm").HasColumnType("int");
                 b.Property<string>("Status").IsRequired().HasMaxLength(20).HasColumnType("nvarchar(20)").HasDefaultValue("Available");

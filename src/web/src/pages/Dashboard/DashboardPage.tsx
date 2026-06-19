@@ -4,21 +4,29 @@ import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
-function KpiCard({ label, value, sub, color = 'brand' }: {
-  label: string; value: number; sub?: string; color?: string
+const KPI_STYLES: Record<string, string> = {
+  green:  'stat-card-green',
+  blue:   'stat-card-blue',
+  amber:  'stat-card-amber',
+  red:    'stat-card-red',
+  purple: 'stat-card-purple',
+  teal:   'stat-card-teal',
+  gray:   'stat-card-gray',
+}
+
+function KpiCard({ label, value, sub, icon, color = 'blue' }: {
+  label: string; value: number; sub?: string; icon?: string; color?: string
 }) {
-  const colors: Record<string, string> = {
-    brand: 'bg-brand-50 text-brand-700',
-    green: 'bg-green-50 text-green-700',
-    orange: 'bg-orange-50 text-orange-700',
-    red: 'bg-red-50 text-red-700',
-    gray: 'bg-gray-50 text-gray-700',
-  }
   return (
-    <div className="card p-5">
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className={`text-3xl font-bold mt-1 ${colors[color]?.split(' ')[1] ?? 'text-gray-900'}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    <div className={KPI_STYLES[color] ?? 'stat-card-blue'}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-medium text-white/80">{label}</p>
+          <p className="text-4xl font-bold text-white mt-1">{value}</p>
+          {sub && <p className="text-xs text-white/60 mt-1">{sub}</p>}
+        </div>
+        {icon && <span className="text-3xl opacity-40">{icon}</span>}
+      </div>
     </div>
   )
 }
@@ -57,27 +65,38 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-
-      {/* KPI grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Available Drivers" value={summary.availableDrivers} color="green" />
-        <KpiCard label="Drivers on Trip"   value={summary.driversOnAssignment} color="brand" />
-        <KpiCard label="Available Vehicles" value={summary.availableVehicles} color="green" />
-        <KpiCard label="Pending Requests"  value={summary.pendingTripRequests} color="orange" />
+      {/* Page header */}
+      <div className="page-header flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Operations Dashboard</h1>
+          <p className="text-sm text-blue-200/70 mt-0.5">Real-time fleet and logistics overview</p>
+        </div>
+        <span className="text-3xl">🚛</span>
       </div>
 
+      {/* KPI grid — Row 1 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Active Assignments"  value={summary.activeAssignments} color="brand" />
-        <KpiCard label="In Maintenance"      value={summary.vehiclesInMaintenance} color="orange" />
-        <KpiCard label="Overdue Maintenance" value={summary.overdueMaintenanceCount} color="red" />
-        <KpiCard label="Due in 14 Days"      value={summary.upcomingMaintenanceCount} color="orange" />
+        <KpiCard label="Available Drivers"  value={summary.availableDrivers}      color="green"  icon="👤" />
+        <KpiCard label="Drivers on Trip"    value={summary.driversOnAssignment}    color="blue"   icon="🚗" />
+        <KpiCard label="Available Vehicles" value={summary.availableVehicles}      color="teal"   icon="🚙" />
+        <KpiCard label="Pending Requests"   value={summary.pendingTripRequests}    color="amber"  icon="📋" />
+      </div>
+
+      {/* KPI grid — Row 2 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="Active Assignments"  value={summary.activeAssignments}        color="purple" icon="✅" />
+        <KpiCard label="In Maintenance"      value={summary.vehiclesInMaintenance}    color="amber"  icon="🔧" />
+        <KpiCard label="Overdue Maintenance" value={summary.overdueMaintenanceCount}  color="red"    icon="⚠️" />
+        <KpiCard label="Due in 14 Days"      value={summary.upcomingMaintenanceCount} color="gray"   icon="📅" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Driver status chart */}
-        <div className="card p-5">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Driver Status</h2>
+        <div className="card overflow-hidden">
+          <div className="bg-gradient-to-r from-brand-600 to-brand-800 px-5 py-3">
+            <h2 className="text-sm font-semibold text-white">Driver Status Overview</h2>
+          </div>
+          <div className="p-5">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={driverData} barSize={40}>
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
@@ -90,22 +109,24 @@ export default function DashboardPage() {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Pending trips */}
-        <div className="card p-5">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">
-            Pending Trip Requests
+        <div className="card overflow-hidden">
+          <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-white">Pending Trip Requests</h2>
             {pendingTrips.length > 0 && (
-              <span className="ml-2 badge bg-yellow-100 text-yellow-800">{pendingTrips.length}</span>
+              <span className="badge bg-white/20 text-white">{pendingTrips.length}</span>
             )}
-          </h2>
+          </div>
+          <div className="p-5">
           {pendingTrips.length === 0 ? (
             <p className="text-sm text-gray-400 py-8 text-center">No pending requests</p>
           ) : (
             <div className="space-y-2">
               {pendingTrips.slice(0, 5).map(t => (
-                <div key={t.id} className="flex items-start justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={t.id} className="flex items-start justify-between p-3 bg-amber-50 border border-amber-100 rounded-lg">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{t.purpose}</p>
                     <p className="text-xs text-gray-500">{t.pickupLocation} → {t.destinationLocation}</p>
@@ -115,17 +136,19 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
+          </div>
         </div>
       </div>
 
       {/* Today's Active Assignments — Driver ↔ Vehicle */}
-      <div className="card p-5">
-        <h2 className="text-base font-semibold text-gray-900 mb-4">
-          Today's Active Assignments
+      <div className="card overflow-hidden">
+        <div className="bg-gradient-to-r from-brand-700 to-indigo-800 px-5 py-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-white">Today's Active Assignments</h2>
           {activeAssignments.length > 0 && (
-            <span className="ml-2 badge bg-blue-100 text-blue-800">{activeAssignments.length}</span>
+            <span className="badge bg-white/20 text-white">{activeAssignments.length}</span>
           )}
-        </h2>
+        </div>
+        <div className="p-5">
         {activeAssignments.length === 0 ? (
           <p className="text-sm text-gray-400 py-4 text-center">No active assignments right now</p>
         ) : (
@@ -176,6 +199,7 @@ export default function DashboardPage() {
             </table>
           </div>
         )}
+        </div>
       </div>
 
       {/* Overdue maintenance */}

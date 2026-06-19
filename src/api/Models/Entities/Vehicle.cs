@@ -9,7 +9,9 @@ public class Vehicle
     public short Year { get; set; }
     public string Status { get; set; } = "Available";         // Available | Assigned | InMaintenance | OutOfService
     public string FuelType { get; set; } = "Diesel";
-    public int OdometerKm { get; set; }
+    public int OdometerKm { get; set; }                        // Kept for odometer tracking
+    public int? MileageAtPurchase { get; set; }                // Odometer reading when purchased
+    public int? PreviousMileageAtPurchase { get; set; }        // Prior odometer (for second-hand vehicles)
     public int ServiceIntervalKm { get; set; } = 10000;
     public DateOnly? LastServiceDate { get; set; }
     public DateOnly? NextServiceDate { get; set; }

@@ -57,7 +57,6 @@ export default function FuelPage() {
       odometerTo: odomTo,
       fuelGaugeBefore: fd.get('fuelGaugeBefore') ? Number(fd.get('fuelGaugeBefore')) : undefined,
       fuelGaugeAfter: fd.get('fuelGaugeAfter') ? Number(fd.get('fuelGaugeAfter')) : undefined,
-      costCentre: fd.get('costCentre') as string || undefined,
       stationName: fd.get('stationName') as string || undefined,
       notes: fd.get('notes') as string || undefined,
       locationId: fd.get('locationId') as string || undefined,
@@ -166,12 +165,11 @@ export default function FuelPage() {
             </div>
             <div><label className="label">Litres Filled</label><input name="litresFilled" type="number" step="0.01" className="input" required /></div>
             <div><label className="label">Cost per Litre (₦)</label><input name="costPerLitre" type="number" step="0.01" className="input" required /></div>
-            <div><label className="label">Current Mileage (km)</label><input name="odometerAtFill" type="number" className="input" required /></div>
+            <div><label className="label">Mileage Before Fuel Purchase (km)</label><input name="odometerAtFill" type="number" className="input" required /></div>
             <div><label className="label">Mileage From (km)</label><input name="odometerFrom" type="number" className="input" placeholder="Previous reading" /></div>
             <div><label className="label">Mileage To (km)</label><input name="odometerTo" type="number" className="input" placeholder="Current reading" /></div>
             <div><label className="label">Fuel Gauge Before (%)</label><input name="fuelGaugeBefore" type="number" min={0} max={100} className="input" /></div>
             <div><label className="label">Fuel Gauge After (%)</label><input name="fuelGaugeAfter" type="number" min={0} max={100} className="input" /></div>
-            <div><label className="label">Cost Centre</label><input name="costCentre" className="input" placeholder="e.g. Project Alpha" /></div>
             <div><label className="label">Station Name</label><input name="stationName" className="input" /></div>
             <div className="md:col-span-3 flex items-center gap-2">
               <input type="checkbox" name="isCashPayment" id="cash" className="h-4 w-4" />

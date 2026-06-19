@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { maintenanceApi, vehiclesApi } from '../../services/api'
+import { maintenanceApi, vehiclesApi, notificationsApi } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import toast from 'react-hot-toast'
@@ -8,12 +8,31 @@ import toast from 'react-hot-toast'
 const STATUS_FILTER = ['', 'Scheduled', 'InProgress', 'Completed', 'Overdue']
 const CATEGORY_FILTER = ['', 'Routine', 'FaultRepair']
 
+const DEPARTMENTS = [
+  'Logistics Manager',
+  'General Service Supervisor',
+  'HSE Department',
+  'Project Manager',
+  'Fleet Coordinator',
+  'Finance / Admin',
+  'All Departments',
+]
+
+interface NotifyModal {
+  recordId: string
+  vehicleReg: string
+  serviceType: string
+}
+
 export default function MaintenancePage() {
   const qc = useQueryClient()
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [category, setCategory] = useState('Routine')
+  const [notifyModal, setNotifyModal] = useState<NotifyModal | null>(null)
+  const [selectedDepts, setSelectedDepts] = useState<string[]>([])
+  const [notifyMessage, setNotifyMessage] = useState('')
 
   const { data: records = [], isLoading } = useQuery({
     queryKey: ['maintenance', statusFilter, categoryFilter],
@@ -43,6 +62,18 @@ export default function MaintenancePage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['maintenance'] }); toast.success('Record updated') },
   })
 
+  const sendNotification = useMutation({
+    mutationFn: (payload: { title: string; message: string; type: string }) =>
+      notificationsApi.broadcast(payload),
+    onSuccess: () => {
+      toast.success('Departments notified successfully')
+      setNotifyModal(null)
+      setSelectedDepts([])
+      setNotifyMessage('')
+    },
+    onError: () => toast.error('Failed to send notifications'),
+  })
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
@@ -60,6 +91,31 @@ export default function MaintenancePage() {
       partsReplaced: fd.get('partsReplaced') as string || undefined,
       repairRemarks: fd.get('repairRemarks') as string || undefined,
     })
+  }
+
+  const openNotify = (r: { id: string; vehicleReg: string; type: string }) => {
+    setNotifyModal({ recordId: r.id, vehicleReg: r.vehicleReg, serviceType: r.type })
+    setNotifyMessage(`Vehicle ${r.vehicleReg} requires ${r.type}. Please be aware and cooperate with the maintenance team during this period.`)
+    setSelectedDepts([])
+  }
+
+  const handleSendNotify = () => {
+    if (!notifyModal) return
+    if (selectedDepts.length === 0) { toast.error('Select at least one department'); return }
+    const recipients = selectedDepts.join(', ')
+    sendNotification.mutate({
+      title: `🔧 Maintenance Request — ${notifyModal.vehicleReg}`,
+      message: `[To: ${recipients}]\n\n${notifyMessage}\n\nVehicle: ${notifyModal.vehicleReg} | Service: ${notifyModal.serviceType}`,
+      type: 'Maintenance',
+    })
+  }
+
+  const toggleDept = (dept: string) => {
+    if (dept === 'All Departments') {
+      setSelectedDepts(selectedDepts.length === DEPARTMENTS.length - 1 ? [] : DEPARTMENTS.filter(d => d !== 'All Departments'))
+      return
+    }
+    setSelectedDepts(prev => prev.includes(dept) ? prev.filter(d => d !== dept) : [...prev, dept])
   }
 
   if (isLoading) return <PageLoader />
@@ -180,21 +236,30 @@ export default function MaintenancePage() {
                   {r.cost != null && ` · ₦${r.cost.toLocaleString()}`}
                 </p>
               </div>
-              {(r.status === 'Scheduled' || r.status === 'InProgress' || r.status === 'Overdue') && (
+              <div className="flex flex-col gap-2 items-end">
+                {/* Notify Departments button */}
                 <button
-                  className="btn-secondary text-xs"
-                  onClick={() => completeRecord.mutate({
-                    id: r.id,
-                    data: {
-                      status: 'Completed',
-                      completedDate: new Date().toISOString().split('T')[0],
-                    },
-                  })}
-                  disabled={completeRecord.isPending}
+                  className="text-xs px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-300 rounded-md hover:bg-amber-100 transition-colors flex items-center gap-1"
+                  onClick={() => openNotify({ id: r.id, vehicleReg: r.vehicleReg, type: r.type })}
                 >
-                  Mark Complete
+                  🔔 Notify Departments
                 </button>
-              )}
+                {(r.status === 'Scheduled' || r.status === 'InProgress' || r.status === 'Overdue') && (
+                  <button
+                    className="btn-secondary text-xs"
+                    onClick={() => completeRecord.mutate({
+                      id: r.id,
+                      data: {
+                        status: 'Completed',
+                        completedDate: new Date().toISOString().split('T')[0],
+                      },
+                    })}
+                    disabled={completeRecord.isPending}
+                  >
+                    Mark Complete
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -202,6 +267,67 @@ export default function MaintenancePage() {
           <div className="card p-12 text-center text-gray-400">No maintenance records found</div>
         )}
       </div>
+
+      {/* ── Notify Departments Modal ─────────────────────────────────────────── */}
+      {notifyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-gray-900">
+                🔔 Notify Departments
+              </h3>
+              <button onClick={() => setNotifyModal(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+              <strong>{notifyModal.vehicleReg}</strong> — {notifyModal.serviceType}
+            </div>
+
+            <div>
+              <label className="label">Select Departments to Notify</label>
+              <div className="grid grid-cols-1 gap-2 mt-1">
+                {DEPARTMENTS.map(dept => (
+                  <label key={dept} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-brand-600 border-gray-300 rounded"
+                      checked={dept === 'All Departments'
+                        ? selectedDepts.length === DEPARTMENTS.length - 1
+                        : selectedDepts.includes(dept)}
+                      onChange={() => toggleDept(dept)}
+                    />
+                    <span className={dept === 'All Departments' ? 'font-medium text-brand-700' : 'text-gray-700'}>
+                      {dept}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Message</label>
+              <textarea
+                className="input"
+                rows={3}
+                value={notifyMessage}
+                onChange={e => setNotifyMessage(e.target.value)}
+                placeholder="Enter notification message…"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                className="btn-primary flex-1"
+                onClick={handleSendNotify}
+                disabled={sendNotification.isPending}
+              >
+                {sendNotification.isPending ? 'Sending…' : '🔔 Send Notification'}
+              </button>
+              <button className="btn-secondary" onClick={() => setNotifyModal(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

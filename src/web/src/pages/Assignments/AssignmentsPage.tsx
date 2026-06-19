@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { assignmentsApi } from '../../services/api'
+import { assignmentsApi, vehiclesApi, driversApi, tripsApi } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useAuth } from '../../auth/useAuth'
@@ -21,6 +21,30 @@ export default function AssignmentsPage() {
     refetchInterval: 30_000,
   })
 
+  // Monitor fleet availability for real-time no-vehicle alerts
+  const { data: vehicles = [] } = useQuery({
+    queryKey: ['vehicles'],
+    queryFn: () => vehiclesApi.getAll(),
+    refetchInterval: 60_000,
+  })
+
+  const { data: drivers = [] } = useQuery({
+    queryKey: ['drivers'],
+    queryFn: driversApi.getAll,
+    refetchInterval: 60_000,
+  })
+
+  const { data: pendingTrips = [] } = useQuery({
+    queryKey: ['trips', 'Pending'],
+    queryFn: () => tripsApi.getAll('Pending'),
+    refetchInterval: 60_000,
+  })
+
+  const availableVehicles = vehicles.filter(v => v.status === 'Available')
+  const availableDrivers = drivers.filter(d => d.driverStatus === 'Available')
+  const noVehicleAvailable = availableVehicles.length === 0 && pendingTrips.length > 0
+  const noDriverAvailable = availableDrivers.length === 0 && pendingTrips.length > 0
+
   const updateStatus = useMutation({
     mutationFn: ({ id, status, notes }: { id: string; status: string; notes?: string }) =>
       assignmentsApi.updateStatus(id, { status, notes }),
@@ -39,6 +63,59 @@ export default function AssignmentsPage() {
 
   return (
     <div className="space-y-4">
+      {/* ── No Vehicle / No Driver Alert Banners ──────────────────────────── */}
+      {noVehicleAvailable && (
+        <div className="rounded-lg bg-red-50 border border-red-300 px-4 py-3 flex items-start gap-3">
+          <span className="text-red-500 text-xl mt-0.5">🚫</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-red-800">No Vehicle Available</p>
+            <p className="text-xs text-red-700 mt-0.5">
+              All {vehicles.length} vehicles are currently assigned or in maintenance.{' '}
+              <strong>{pendingTrips.length} trip request(s)</strong> are waiting.
+              Coordinators: check if any assigned trips can be completed early to free up a vehicle,
+              or contact the Fleet Manager to source an additional vehicle.
+            </p>
+          </div>
+          <button className="text-red-400 hover:text-red-600 text-xs flex-shrink-0" onClick={() => qc.invalidateQueries({ queryKey: ['vehicles'] })}>↺</button>
+        </div>
+      )}
+
+      {noDriverAvailable && !noVehicleAvailable && (
+        <div className="rounded-lg bg-amber-50 border border-amber-300 px-4 py-3 flex items-start gap-3">
+          <span className="text-amber-500 text-xl mt-0.5">⚠️</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">No Driver Currently Available</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              All {drivers.length} drivers are on assignment, on break, or off duty.{' '}
+              <strong>{pendingTrips.length} trip request(s)</strong> are queued.
+              Contact a driver on break or check the Driver Schedule to see when one becomes available.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Fleet Snapshot (only shown when coordinator/manager) */}
+      {isCoord && (
+        <div className="grid grid-cols-4 gap-3">
+          <div className="card px-3 py-2 flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
+            <span className="text-xs text-gray-600">{availableVehicles.length} vehicle{availableVehicles.length !== 1 ? 's' : ''} available</span>
+          </div>
+          <div className="card px-3 py-2 flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
+            <span className="text-xs text-gray-600">{availableDrivers.length} driver{availableDrivers.length !== 1 ? 's' : ''} available</span>
+          </div>
+          <div className="card px-3 py-2 flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500 flex-shrink-0" />
+            <span className="text-xs text-gray-600">{pendingTrips.length} pending trip{pendingTrips.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="card px-3 py-2 flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
+            <span className="text-xs text-gray-600">{assignments.length} active assignment{assignments.length !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Assignments</h1>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input w-auto">

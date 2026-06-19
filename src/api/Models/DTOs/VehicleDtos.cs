@@ -9,6 +9,8 @@ public record VehicleDto(
     string Status,
     string FuelType,
     int OdometerKm,
+    int? MileageAtPurchase,
+    int? PreviousMileageAtPurchase,
     int ServiceIntervalKm,
     DateOnly? LastServiceDate,
     DateOnly? NextServiceDate,
@@ -30,7 +32,9 @@ public record CreateVehicleDto(
     int ServiceIntervalKm,
     string? ChassisNo = null,
     short? PurchaseYear = null,
-    string? Colour = null
+    string? Colour = null,
+    int? MileageAtPurchase = null,
+    int? PreviousMileageAtPurchase = null
 );
 
 public record UpdateVehicleDto(

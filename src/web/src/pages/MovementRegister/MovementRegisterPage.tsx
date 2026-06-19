@@ -7,12 +7,13 @@ import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 
 const MOVEMENT_TYPES = [
-  { value: 'VehicleOut', label: '🚗 Vehicle Out' },
-  { value: 'VehicleIn', label: '🏁 Vehicle In' },
-  { value: 'MaterialOut', label: '📦 Material Out' },
-  { value: 'MaterialIn', label: '📥 Material In' },
-  { value: 'GatePass', label: '🎫 Gate Pass' },
-  { value: 'StaffMovement', label: '👤 Staff Movement' },
+  { value: 'StaffTransfer', label: '👤 Staff Transfer' },
+  { value: 'Delivery', label: '📦 Delivery' },
+  { value: 'Collection', label: '📥 Collection' },
+  { value: 'SiteVisit', label: '🏗️ Site Visit' },
+  { value: 'AirportTrip', label: '✈️ Airport Trip' },
+  { value: 'OfficialErrand', label: '🏢 Official Errand' },
+  { value: 'Other', label: '🔖 Other' },
 ]
 
 export default function MovementRegisterPage() {
@@ -67,7 +68,6 @@ export default function MovementRegisterPage() {
       mileageOut: mileageOutRaw ? Number(mileageOutRaw) : undefined,
       mileageIn: mileageInRaw ? Number(mileageInRaw) : undefined,
       returnDateTime: returnDtRaw || undefined,
-      gatePassNo: fd.get('gatePassNo') as string || undefined,
     })
   }
 
@@ -132,7 +132,6 @@ export default function MovementRegisterPage() {
             <div><label className="label">Time In <span className="text-gray-400 font-normal text-xs">(if already returned)</span></label><input name="returnDateTime" type="datetime-local" className="input" /></div>
             <div><label className="label">Mileage Out (km)</label><input name="mileageOut" type="number" className="input" placeholder="Odometer at departure" /></div>
             <div><label className="label">Mileage In (km)</label><input name="mileageIn" type="number" className="input" placeholder="Odometer at return" /></div>
-            <div><label className="label">Gate Pass No</label><input name="gatePassNo" className="input" /></div>
             <div><label className="label">Related Ref No</label><input name="relatedRefNo" className="input" placeholder="Trip / Form no" /></div>
             <div className="md:col-span-3 flex gap-3">
               <button type="submit" className="btn-primary" disabled={createMovement.isPending}>Log Movement</button>

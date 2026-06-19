@@ -48,7 +48,6 @@ export default function DriversPage() {
     const fd = new FormData(e.currentTarget)
     registerDriver.mutate({
       fullName: fd.get('fullName') as string,
-      email: fd.get('email') as string,
       phoneNumber: fd.get('phoneNumber') as string || undefined,
       licenceNo: fd.get('licenceNo') as string || undefined,
       licenceExpiry: fd.get('licenceExpiry') as string || undefined,
@@ -85,10 +84,6 @@ export default function DriversPage() {
             <div>
               <label className="label">Full Name <span className="text-red-500">*</span></label>
               <input name="fullName" className="input" placeholder="e.g. Kwame Asante" required />
-            </div>
-            <div>
-              <label className="label">Email <span className="text-red-500">*</span></label>
-              <input name="email" type="email" className="input" placeholder="e.g. k.asante@company.com" required />
             </div>
             <div>
               <label className="label">Phone Number</label>

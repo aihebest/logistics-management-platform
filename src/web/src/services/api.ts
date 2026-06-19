@@ -54,6 +54,8 @@ export interface Vehicle {
   status: string
   fuelType: string
   odometerKm: number
+  mileageAtPurchase?: number
+  previousMileageAtPurchase?: number
   serviceIntervalKm: number
   lastServiceDate?: string
   nextServiceDate?: string
@@ -417,6 +419,8 @@ export const notificationsApi = {
   getMine: () => api.get<Notification[]>('/notifications').then(r => r.data),
   markRead: (id: string) => api.patch(`/notifications/${id}/read`),
   markAllRead: () => api.patch('/notifications/read-all'),
+  broadcast: (payload: { title: string; message: string; type: string }) =>
+    api.post('/notifications/broadcast', payload).then(r => r.data),
 }
 
 // Phase 2

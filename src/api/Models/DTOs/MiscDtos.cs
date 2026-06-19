@@ -40,4 +40,6 @@ public record DashboardSummaryDto(
 
 public record SasTokenDto(string Url, string BlobName, DateTimeOffset ExpiresAt);
 
+public record BroadcastNotificationDto(string Title, string Message, string Type);
+
 public record PagedResult<T>(IEnumerable<T> Items, int TotalCount, int Page, int PageSize);

@@ -45,7 +45,9 @@ export default function VehiclesPage() {
       model: fd.get('model') as string,
       year: Number(fd.get('year')),
       fuelType: fd.get('fuelType') as string,
-      odometerKm: Number(fd.get('odometerKm')),
+      odometerKm: fd.get('mileageAtPurchase') ? Number(fd.get('mileageAtPurchase')) : 0,
+      mileageAtPurchase: fd.get('mileageAtPurchase') ? Number(fd.get('mileageAtPurchase')) : undefined,
+      previousMileageAtPurchase: fd.get('previousMileageAtPurchase') ? Number(fd.get('previousMileageAtPurchase')) : undefined,
       serviceIntervalKm: Number(fd.get('serviceIntervalKm')) || 10000,
       chassisNo: fd.get('chassisNo') as string || undefined,
       purchaseYear: fd.get('purchaseYear') ? Number(fd.get('purchaseYear')) : undefined,
@@ -83,7 +85,8 @@ export default function VehiclesPage() {
                 <option>Diesel (AGO)</option><option>Petrol (PMS)</option><option>Electric</option><option>Hybrid</option>
               </select>
             </div>
-            <div><label className="label">Odometer (km)</label><input name="odometerKm" type="number" className="input" defaultValue={0} /></div>
+            <div><label className="label">Mileage at Purchase (km)</label><input name="mileageAtPurchase" type="number" className="input" placeholder="Odometer when purchased" /></div>
+            <div><label className="label">Previous Mileage at Purchase (km)</label><input name="previousMileageAtPurchase" type="number" className="input" placeholder="Prior odometer (2nd-hand vehicles)" /></div>
             <div><label className="label">Service Interval (km)</label><input name="serviceIntervalKm" type="number" className="input" defaultValue={10000} /></div>
             {/* Phase 1 lifecycle fields */}
             <div><label className="label">Chassis No</label><input name="chassisNo" className="input" placeholder="Optional" /></div>
@@ -111,6 +114,12 @@ export default function VehiclesPage() {
             <div><span className="text-gray-500">Chassis No</span><p className="font-medium">{selectedVehicle.chassisNo || '—'}</p></div>
             <div><span className="text-gray-500">Colour</span><p className="font-medium">{selectedVehicle.colour || '—'}</p></div>
             <div><span className="text-gray-500">Vehicle Age</span><p className="font-medium">{selectedVehicle.vehicleAge} year(s)</p></div>
+            {selectedVehicle.mileageAtPurchase != null && (
+              <div><span className="text-gray-500">Mileage at Purchase</span><p className="font-medium">{selectedVehicle.mileageAtPurchase.toLocaleString()} km</p></div>
+            )}
+            {selectedVehicle.previousMileageAtPurchase != null && (
+              <div><span className="text-gray-500">Previous Mileage at Purchase</span><p className="font-medium">{selectedVehicle.previousMileageAtPurchase.toLocaleString()} km</p></div>
+            )}
           </div>
           {history.length === 0 ? (
             <p className="text-sm text-gray-400 py-4 text-center">No maintenance records</p>

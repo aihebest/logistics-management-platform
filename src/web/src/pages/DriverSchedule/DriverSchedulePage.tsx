@@ -16,6 +16,7 @@ const SHIFTS = [
   'Expatriate Driver',
   'Management Driver',
   'Project Assignment Driver',
+  'Airport Drop-off/Pick-up',
 ]
 
 const SHIFT_COLOR: Record<string, string> = {
@@ -28,6 +29,7 @@ const SHIFT_COLOR: Record<string, string> = {
   'Expatriate Driver':        'bg-orange-100 text-orange-800',
   'Management Driver':        'bg-rose-100 text-rose-800',
   'Project Assignment Driver':'bg-teal-100 text-teal-800',
+  'Airport Drop-off/Pick-up': 'bg-sky-100 text-sky-800',
 }
 
 const SHORT_LABEL: Record<string, string> = {
@@ -40,6 +42,7 @@ const SHORT_LABEL: Record<string, string> = {
   'Expatriate Driver':        'Expat',
   'Management Driver':        'Mgmt',
   'Project Assignment Driver':'Project',
+  'Airport Drop-off/Pick-up': '✈ Airport',
 }
 
 function getMonday(d: Date) {
