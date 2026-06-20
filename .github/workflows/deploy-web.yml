@@ -1,0 +1,67 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Desicon Logistics — React Frontend Deployment Pipeline
+# Deploys to Azure Static Web Apps (Free tier — global CDN)
+#
+# Required GitHub Secrets:
+#   AZURE_STATIC_WEB_APPS_API_TOKEN  — deployment token from Static Web App
+#   VITE_API_BASE_URL                — e.g. https://app-deslogistics-api-prod-abc123.azurewebsites.net/api
+#   VITE_ENTRA_CLIENT_ID             — SPA app registration client ID (web app, NOT the API app)
+#   VITE_ENTRA_TENANT_ID             — 77e479f1-fefd-4238-a1a9-6b1f692f20b8
+#   VITE_ENTRA_API_SCOPE             — api://1b657901-dc12-4927-b9a1-2889fd021c1f/Logistics.Access
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: Deploy Web to Azure Static Web Apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/web/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy React App
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Setup Node ────────────────────────────────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src/web/package-lock.json
+
+      # ── Install dependencies ──────────────────────────────────────────────────
+      - name: Install npm packages
+        run: npm ci
+        working-directory: src/web
+
+      # ── Build React app ───────────────────────────────────────────────────────
+      # VITE_ variables are baked into the bundle at build time.
+      # They come from GitHub Secrets — never hardcoded here.
+      - name: Build production bundle
+        run: npm run build
+        working-directory: src/web
+        env:
+          VITE_API_BASE_URL:    ${{ secrets.VITE_API_BASE_URL }}
+          VITE_ENTRA_CLIENT_ID: ${{ secrets.VITE_ENTRA_CLIENT_ID }}
+          VITE_ENTRA_TENANT_ID: ${{ secrets.VITE_ENTRA_TENANT_ID }}
+          VITE_ENTRA_API_SCOPE: ${{ secrets.VITE_ENTRA_API_SCOPE }}
+
+      # ── Deploy to Azure Static Web Apps ──────────────────────────────────────
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: 'upload'
+          app_location: 'src/web/dist'    # Pre-built output — skip SWA build
+          skip_app_build: true
+          output_location: ''

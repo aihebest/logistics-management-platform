@@ -1,0 +1,88 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Desicon Logistics — API Deployment Pipeline
+# Triggers on: push to main branch (src/api/** changes)
+#
+# Required GitHub Secrets:
+#   AZURE_CREDENTIALS       — Service principal JSON (az ad sp create-for-rbac output)
+#   AZURE_APP_SERVICE_NAME  — e.g. app-deslogistics-api-prod-abc123
+#   AZURE_RESOURCE_GROUP    — e.g. rg-desicon-logistics-prod
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: Deploy API to Azure App Service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/api/**'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:   # Allow manual trigger from GitHub Actions UI
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  PROJECT_PATH: 'src/api'
+  BUILD_CONFIGURATION: 'Release'
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy .NET 8 API
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Setup .NET ────────────────────────────────────────────────────────────
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # ── Restore dependencies ──────────────────────────────────────────────────
+      - name: Restore NuGet packages
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      # ── Build ─────────────────────────────────────────────────────────────────
+      - name: Build
+        run: dotnet build ${{ env.PROJECT_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore
+
+      # ── Publish ───────────────────────────────────────────────────────────────
+      - name: Publish
+        run: dotnet publish ${{ env.PROJECT_PATH }} \
+          --configuration ${{ env.BUILD_CONFIGURATION }} \
+          --no-build \
+          --output ./publish
+
+      # ── Login to Azure ────────────────────────────────────────────────────────
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # ── Deploy to App Service ─────────────────────────────────────────────────
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_APP_SERVICE_NAME }}
+          package: ./publish
+
+      # ── Verify health endpoint ────────────────────────────────────────────────
+      - name: Wait for App Service to be ready
+        run: sleep 30
+
+      - name: Health check
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://${{ secrets.AZURE_APP_SERVICE_NAME }}.azurewebsites.net/health)
+          echo "Health check status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed with status $STATUS"
+            exit 1
+          fi
+          echo "API is healthy"
+
+      # ── Logout ────────────────────────────────────────────────────────────────
+      - name: Logout from Azure
+        run: az logout
+        if: always()

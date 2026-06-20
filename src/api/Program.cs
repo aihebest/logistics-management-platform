@@ -119,8 +119,9 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-// ── Auto-migrate and seed on startup (dev / Docker only) ─────────────────────
-if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Docker"))
+// ── Auto-migrate on startup (all environments) ───────────────────────────────
+// EF migrations are idempotent — safe to run on every startup.
+// Seeding is gated by Demo:SeedOnStartup (true in Docker, false in Production).
 {
     using var scope = app.Services.CreateScope();
     var db     = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -128,7 +129,9 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Docker"))
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
     db.Database.Migrate();
-    await LogisticsApi.Data.DatabaseSeeder.SeedAsync(db, cfg, logger);
+
+    if (cfg.GetValue<bool>("Demo:SeedOnStartup"))
+        await LogisticsApi.Data.DatabaseSeeder.SeedAsync(db, cfg, logger);
 }
 
 // ── Middleware pipeline ───────────────────────────────────────────────────────
