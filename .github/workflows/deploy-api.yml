@@ -20,7 +20,7 @@ on:
 
 env:
   DOTNET_VERSION: '8.0.x'
-  PROJECT_PATH: 'src/api'
+  PROJECT_PATH: 'src/api/LogisticsApi.csproj'
   BUILD_CONFIGURATION: 'Release'
 
 jobs:
