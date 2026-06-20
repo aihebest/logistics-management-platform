@@ -77,3 +77,12 @@ public record UpdateAssignmentStatusDto(
     string? Notes,
     DateTime? ActualEndTime
 );
+
+/// <summary>Optional body for the PATCH /trips/{id}/approve endpoint.</summary>
+public record ApproveTripDto(
+    Guid? DriverId,   // null = use auto-assignment
+    Guid? VehicleId   // null = use auto-assignment
+);
+
+/// <summary>Body for the PATCH /trips/{id}/reject endpoint.</summary>
+public record RejectTripDto(string? Reason);
