@@ -43,15 +43,14 @@ jobs:
       - name: Restore NuGet packages
         run: dotnet restore ${{ env.PROJECT_PATH }}
 
-      # ── Build ─────────────────────────────────────────────────────────────────
-      - name: Build
-        run: dotnet build ${{ env.PROJECT_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore
-
-      # ── Publish ───────────────────────────────────────────────────────────────
+      # ── Build & Publish ───────────────────────────────────────────────────────
+      # Combined into one step to ensure the correct .NET 8 SDK is used throughout.
+      # Separating build + publish --no-build can cause the runner's system dotnet
+      # (now .NET 10 on ubuntu-latest) to be invoked instead of the pinned SDK.
       - name: Publish
         run: dotnet publish ${{ env.PROJECT_PATH }} \
           --configuration ${{ env.BUILD_CONFIGURATION }} \
-          --no-build \
+          --no-restore \
           --output ./publish
 
       # ── Login to Azure ────────────────────────────────────────────────────────
