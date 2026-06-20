@@ -69,19 +69,24 @@ jobs:
           package: ./publish
 
       # ── Verify health endpoint ────────────────────────────────────────────────
-      - name: Wait for App Service to be ready
-        run: sleep 30
-
-      - name: Health check
+      # On first deployment EF Core runs all migrations before serving requests.
+      # Retry up to 10 times (every 15s = up to 2.5 minutes total wait).
+      - name: Health check with retry
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://${{ secrets.AZURE_APP_SERVICE_NAME }}.azurewebsites.net/health)
-          echo "Health check status: $STATUS"
-          if [ "$STATUS" != "200" ]; then
-            echo "Health check failed with status $STATUS"
-            exit 1
-          fi
-          echo "API is healthy"
+          URL="https://${{ secrets.AZURE_APP_SERVICE_NAME }}.azurewebsites.net/health"
+          echo "Waiting for API to become healthy at $URL"
+          for i in {1..10}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ API is healthy"
+              exit 0
+            fi
+            echo "Not ready yet — waiting 15s..."
+            sleep 15
+          done
+          echo "❌ API did not become healthy after 150s"
+          exit 1
 
       # ── Logout ────────────────────────────────────────────────────────────────
       - name: Logout from Azure
