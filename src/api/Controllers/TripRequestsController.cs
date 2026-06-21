@@ -55,9 +55,55 @@ public class TripRequestsController(
     [HttpPost]
     public async Task<ActionResult<TripRequestDto>> Create(CreateTripRequestDto dto)
     {
-        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var caller   = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
-        if (caller == null) return Unauthorized(new { error = "User not provisioned in platform" });
+        var callerId = User.FindFirstValue("oid")
+                    ?? User.FindFirstValue("http://schemas.microsoft.com/identity/claims/objectidentifier")
+                    ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrEmpty(callerId))
+            return Unauthorized(new { error = "Cannot resolve user identity from token" });
+
+        // Find or auto-provision the caller. Handles the case where the frontend
+        // auth/me call hasn't run yet (first request after login) or where the
+        // user was pre-registered with a placeholder OID.
+        var caller = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
+        if (caller == null)
+        {
+            var email = (User.FindFirstValue("preferred_username")
+                      ?? User.FindFirstValue(ClaimTypes.Email)
+                      ?? "").ToLowerInvariant().Trim();
+
+            // Try email match (pre-registered placeholder)
+            if (!string.IsNullOrEmpty(email))
+                caller = await db.Users.FirstOrDefaultAsync(
+                    u => u.Email == email && u.EntraObjectId.StartsWith("pre-"));
+
+            if (caller != null)
+            {
+                caller.EntraObjectId = callerId;
+                await db.SaveChangesAsync();
+            }
+            else
+            {
+                // Auto-create — Admin can promote role via the Users admin page
+                var fullName = User.FindFirstValue("name") ?? User.FindFirstValue(ClaimTypes.Name) ?? email;
+                caller = new Models.Entities.User
+                {
+                    Id            = Guid.NewGuid(),
+                    EntraObjectId = callerId,
+                    FullName      = fullName,
+                    Email         = email,
+                    Role          = "Driver",
+                    DriverStatus  = "OffDuty",
+                    IsActive      = true,
+                    CreatedAt     = DateTime.UtcNow
+                };
+                db.Users.Add(caller);
+                await db.SaveChangesAsync();
+                logger.LogInformation(
+                    "Auto-provisioned user {Email} (OID {OId}) on first trip request",
+                    email, callerId);
+            }
+        }
 
         var trip = new Models.Entities.TripRequest
         {

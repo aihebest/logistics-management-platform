@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../auth/useAuth'
 import { useQuery } from '@tanstack/react-query'
-import { notificationsApi } from '../../services/api'
+import { authApi, notificationsApi } from '../../services/api'
 
 const navGroups = [
   {
@@ -50,7 +50,19 @@ type AppRole = import('../../auth/useAuth').AppRole
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { pathname } = useLocation()
-  const { hasRole, displayName, logout, roles } = useAuth()
+  const { hasRole, displayName, logout, roles, account } = useAuth()
+
+  // Provision the user in the platform DB on every login session.
+  // auth/me creates or links the user record so that protected write
+  // endpoints (trips, assignments, etc.) can resolve the caller by OID.
+  useEffect(() => {
+    if (!account) return
+    authApi.me().catch(err => {
+      console.warn('[AppShell] User provisioning via auth/me failed:', err)
+    })
+  // Re-run if the signed-in account changes (e.g. different user logs in)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.homeAccountId])
 
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications'],
