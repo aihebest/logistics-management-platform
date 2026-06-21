@@ -16,8 +16,12 @@ api.interceptors.request.use(async config => {
         account: accounts[0],
       })
       config.headers.Authorization = `Bearer ${result.accessToken}`
-    } catch {
-      // Token refresh failed — let the request proceed without auth (will get 401)
+    } catch (err: unknown) {
+      // If silent refresh fails (e.g. token expired, consent needed),
+      // trigger an interactive redirect so the user re-authenticates.
+      // This prevents all API calls silently failing with 401.
+      console.warn('Silent token acquisition failed — redirecting to login', err)
+      await msalInstance.acquireTokenRedirect({ scopes: apiScopes })
     }
   }
   return config
