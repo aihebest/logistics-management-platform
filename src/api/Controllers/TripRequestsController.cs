@@ -15,7 +15,8 @@ namespace LogisticsApi.Controllers;
 public class TripRequestsController(
     AppDbContext db,
     IAssignmentEngine engine,
-    INotificationService notifications) : ControllerBase
+    INotificationService notifications,
+    ILogger<TripRequestsController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<IEnumerable<TripRequestDto>> GetAll(
@@ -79,8 +80,10 @@ public class TripRequestsController(
         await db.SaveChangesAsync();
 
         // Send submission confirmation to requester + alert coordinators/managers
+        // Wrapped in try/catch so notification failures never block trip creation
         trip.RequestedBy = caller;
-        await notifications.SendTripRequestSubmittedAsync(trip);
+        try { await notifications.SendTripRequestSubmittedAsync(trip); }
+        catch (Exception ex) { logger.LogError(ex, "Notification failed for trip {TripId} — trip was saved successfully", trip.Id); }
 
         // Attempt auto-assignment
         await engine.AssignAsync(trip, caller.Id);
