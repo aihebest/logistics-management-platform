@@ -294,21 +294,35 @@ public class NotificationService(
     public async Task NotifyInAppAsync(Guid recipientId, string type, string subject, string body,
                                        string? relatedEntityType = null, string? relatedEntityId = null)
     {
-        db.Notifications.Add(new Notification
+        try
         {
-            Id                = Guid.NewGuid(),
-            RecipientId       = recipientId,
-            Channel           = "InApp",
-            Type              = type,
-            Subject           = subject,
-            Body              = body,
-            Status            = "Sent",
-            SentAt            = DateTime.UtcNow,
-            RelatedEntityType = relatedEntityType,
-            RelatedEntityId   = relatedEntityId,
-            CreatedAt         = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+            // Use a fresh SaveChanges scope — detach everything to avoid EF tracker conflicts
+            // when called after another SaveChangesAsync in the same request pipeline
+            db.ChangeTracker.AutoDetectChangesEnabled = false;
+            db.Notifications.Add(new Notification
+            {
+                Id                = Guid.NewGuid(),
+                RecipientId       = recipientId,
+                Channel           = "InApp",
+                Type              = type,
+                Subject           = subject,
+                Body              = body,
+                Status            = "Sent",
+                SentAt            = DateTime.UtcNow,
+                RelatedEntityType = relatedEntityType,
+                RelatedEntityId   = relatedEntityId,
+                CreatedAt         = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "In-app notification failed for recipient {RecipientId} — continuing", recipientId);
+        }
+        finally
+        {
+            db.ChangeTracker.AutoDetectChangesEnabled = true;
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
