@@ -71,8 +71,9 @@ public class TripRequestsController(
             Priority            = dto.Priority,
             Notes               = dto.Notes,
             MovementType        = dto.MovementType,
-            DepartureDate       = dto.DepartureDate,
-            DepartureTime       = dto.DepartureTime?.ToString("HH:mm"),
+            // DepartureDate arrives as "yyyy-MM-dd" string; DepartureTime as "HH:mm"
+            DepartureDate       = DateOnly.TryParse(dto.DepartureDate, out var depDate) ? depDate : null,
+            DepartureTime       = dto.DepartureTime,   // already "HH:mm" — store as-is
             CreatedAt           = DateTime.UtcNow
         };
 

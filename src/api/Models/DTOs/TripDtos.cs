@@ -36,8 +36,10 @@ public record CreateTripRequestDto(
     string Priority,
     string? Notes,
     string MovementType = "IntraState",
-    DateOnly? DepartureDate = null,
-    TimeOnly? DepartureTime = null
+    // Accept plain strings from the browser — <input type="date"> sends "yyyy-MM-dd"
+    // and <input type="time"> sends "HH:mm" (no seconds), which TimeOnly rejects.
+    string? DepartureDate = null,
+    string? DepartureTime = null
 );
 
 public record AssignmentDto(
