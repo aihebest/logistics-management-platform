@@ -84,7 +84,15 @@ public class TripRequestsController(
             }
             else
             {
-                // Auto-create — Admin can promote role via the Users admin page
+                // Derive role from Entra ID app roles in the token so the user
+                // is created with the correct platform role immediately.
+                var tokenRoles = User.FindAll("roles").Select(c => c.Value).ToList();
+                var role = tokenRoles.Contains("Admin")       ? "Admin"
+                         : tokenRoles.Contains("Manager")     ? "Manager"
+                         : tokenRoles.Contains("Coordinator") ? "Coordinator"
+                         : tokenRoles.Contains("Mechanic")    ? "Mechanic"
+                         : "Driver";
+
                 var fullName = User.FindFirstValue("name") ?? User.FindFirstValue(ClaimTypes.Name) ?? email;
                 caller = new Models.Entities.User
                 {
@@ -92,7 +100,7 @@ public class TripRequestsController(
                     EntraObjectId = callerId,
                     FullName      = fullName,
                     Email         = email,
-                    Role          = "Driver",
+                    Role          = role,
                     DriverStatus  = "OffDuty",
                     IsActive      = true,
                     CreatedAt     = DateTime.UtcNow
@@ -100,8 +108,8 @@ public class TripRequestsController(
                 db.Users.Add(caller);
                 await db.SaveChangesAsync();
                 logger.LogInformation(
-                    "Auto-provisioned user {Email} (OID {OId}) on first trip request",
-                    email, callerId);
+                    "Auto-provisioned user {Email} as {Role} (OID {OId}) on first trip request",
+                    email, role, callerId);
             }
         }
 

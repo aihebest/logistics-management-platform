@@ -61,13 +61,22 @@ public class AuthController(AppDbContext db) : ControllerBase
         }
 
         // ── 3. Auto-create (first login by someone not pre-registered) ────────
+        // Use the Entra ID app roles from the token to set the correct platform
+        // role immediately, instead of always defaulting to Driver.
+        var tokenRoles = User.FindAll("roles").Select(c => c.Value).ToList();
+        var assignedRole = tokenRoles.Contains("Admin")       ? "Admin"
+                         : tokenRoles.Contains("Manager")     ? "Manager"
+                         : tokenRoles.Contains("Coordinator") ? "Coordinator"
+                         : tokenRoles.Contains("Mechanic")    ? "Mechanic"
+                         : "Driver";   // Fallback — Admin promotes manually
+
         var newUser = new User
         {
             Id = Guid.NewGuid(),
             EntraObjectId = entraOid,
             FullName = fullName,
             Email = email,
-            Role = "Driver",          // Default — Admin promotes as needed
+            Role = assignedRole,
             DriverStatus = "OffDuty",
             IsActive = true,
             CreatedAt = DateTime.UtcNow

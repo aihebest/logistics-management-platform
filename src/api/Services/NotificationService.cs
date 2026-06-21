@@ -73,8 +73,17 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        // Notify all active Coordinators and Managers by email
-        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager", "Admin");
+        // Notify all active Coordinators and Managers by email.
+        // Also always include the configured ManagerEmail / SupervisorEmail so
+        // notifications reach the team even before users are assigned DB roles.
+        var dbRecipients  = await GetEmailsForRolesAsync("Coordinator", "Manager", "Admin");
+        var cfgRecipients = new[] { _managerEmail, _supervisorEmail }
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Select(e => e!);
+        var recipients = dbRecipients
+            .Union(cfgRecipients, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         foreach (var email in recipients)
             await SendEmailAsync(email, subject, body);
 
