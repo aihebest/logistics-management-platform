@@ -11,7 +11,7 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/assignments")]
 [Authorize]
-public class AssignmentsController(AppDbContext db, INotificationService notifications, IAuditService audit) : ControllerBase
+public class AssignmentsController(AppDbContext db, INotificationService notifications, IAuditService audit, ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
     [Authorize(Roles = "Coordinator,Manager,Admin")]
@@ -45,8 +45,7 @@ public class AssignmentsController(AppDbContext db, INotificationService notific
         var vehicle = await db.Vehicles.FindAsync(dto.VehicleId);
         if (vehicle == null) return BadRequest(new { error = "Vehicle not found" });
 
-        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var caller = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
 
         var assignment = new Models.Entities.Assignment
         {

@@ -1,6 +1,6 @@
-using System.Security.Claims;
 using LogisticsApi.Data;
 using LogisticsApi.Models.DTOs;
+using LogisticsApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +10,7 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/fuel")]
 [Authorize]
-public class FuelController(AppDbContext db) : ControllerBase
+public class FuelController(AppDbContext db, ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
     public async Task<IEnumerable<FuelLogDto>> GetAll(
@@ -41,8 +41,7 @@ public class FuelController(AppDbContext db) : ControllerBase
         var vehicle = await db.Vehicles.FindAsync(dto.VehicleId);
         if (vehicle == null) return BadRequest(new { error = "Vehicle not found" });
 
-        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var caller = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
         if (caller == null) return Unauthorized();
 
         var totalCost = dto.LitresFilled * dto.CostPerLitre;

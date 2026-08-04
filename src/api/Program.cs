@@ -73,6 +73,7 @@ if (!string.IsNullOrEmpty(acsConn))
 builder.Services.AddMemoryCache();
 
 // ── Application Services ──────────────────────────────────────────────────────
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IAssignmentEngine, AssignmentEngineService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IStorageService, StorageService>();

@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using LogisticsApi.Data;
 using LogisticsApi.Models.DTOs;
 using LogisticsApi.Models.Entities;
+using LogisticsApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +11,7 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/movement-register")]
 [Authorize]
-public class MovementRegisterController(AppDbContext db) : ControllerBase
+public class MovementRegisterController(AppDbContext db, ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
     public async Task<IEnumerable<MovementRegisterDto>> GetAll(
@@ -51,8 +51,7 @@ public class MovementRegisterController(AppDbContext db) : ControllerBase
     [HttpPost]
     public async Task<ActionResult<MovementRegisterDto>> Create(CreateMovementRegisterDto dto)
     {
-        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var caller = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
         if (caller == null) return Unauthorized();
 
         var entry = new MovementRegister

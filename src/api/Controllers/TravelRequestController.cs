@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using LogisticsApi.Data;
 using LogisticsApi.Models.DTOs;
 using LogisticsApi.Models.Entities;
+using LogisticsApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +11,7 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/travel")]
 [Authorize]
-public class TravelRequestController(AppDbContext db) : ControllerBase
+public class TravelRequestController(AppDbContext db, ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
     public async Task<IEnumerable<TravelRequestDto>> GetAll(
@@ -42,8 +42,7 @@ public class TravelRequestController(AppDbContext db) : ControllerBase
     [HttpPost]
     public async Task<ActionResult<TravelRequestDto>> Create(CreateTravelRequestDto dto)
     {
-        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var caller = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
         if (caller == null) return Unauthorized();
 
         var request = new TravelRequest
@@ -82,8 +81,7 @@ public class TravelRequestController(AppDbContext db) : ControllerBase
         if (request.Status != "Pending")
             return BadRequest(new { error = "Request is not pending" });
 
-        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var caller = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
         if (caller == null) return Unauthorized();
 
         request.Status = dto.Action == "Approve" ? "Approved" : "Rejected";

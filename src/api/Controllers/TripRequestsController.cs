@@ -16,6 +16,7 @@ public class TripRequestsController(
     AppDbContext db,
     IAssignmentEngine engine,
     INotificationService notifications,
+    ICurrentUserService currentUser,
     ILogger<TripRequestsController> logger) : ControllerBase
 {
     [HttpGet]
@@ -55,63 +56,9 @@ public class TripRequestsController(
     [HttpPost]
     public async Task<ActionResult<TripRequestDto>> Create(CreateTripRequestDto dto)
     {
-        var callerId = User.FindFirstValue("oid")
-                    ?? User.FindFirstValue("http://schemas.microsoft.com/identity/claims/objectidentifier")
-                    ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-        if (string.IsNullOrEmpty(callerId))
-            return Unauthorized(new { error = "Cannot resolve user identity from token" });
-
-        // Find or auto-provision the caller. Handles the case where the frontend
-        // auth/me call hasn't run yet (first request after login) or where the
-        // user was pre-registered with a placeholder OID.
-        var caller = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
         if (caller == null)
-        {
-            var email = (User.FindFirstValue("preferred_username")
-                      ?? User.FindFirstValue(ClaimTypes.Email)
-                      ?? "").ToLowerInvariant().Trim();
-
-            // Try email match (pre-registered placeholder)
-            if (!string.IsNullOrEmpty(email))
-                caller = await db.Users.FirstOrDefaultAsync(
-                    u => u.Email == email && u.EntraObjectId.StartsWith("pre-"));
-
-            if (caller != null)
-            {
-                caller.EntraObjectId = callerId;
-                await db.SaveChangesAsync();
-            }
-            else
-            {
-                // Derive role from Entra ID app roles in the token so the user
-                // is created with the correct platform role immediately.
-                var tokenRoles = User.FindAll("roles").Select(c => c.Value).ToList();
-                var role = tokenRoles.Contains("Admin")       ? "Admin"
-                         : tokenRoles.Contains("Manager")     ? "Manager"
-                         : tokenRoles.Contains("Coordinator") ? "Coordinator"
-                         : tokenRoles.Contains("Mechanic")    ? "Mechanic"
-                         : "Driver";
-
-                var fullName = User.FindFirstValue("name") ?? User.FindFirstValue(ClaimTypes.Name) ?? email;
-                caller = new Models.Entities.User
-                {
-                    Id            = Guid.NewGuid(),
-                    EntraObjectId = callerId,
-                    FullName      = fullName,
-                    Email         = email,
-                    Role          = role,
-                    DriverStatus  = "OffDuty",
-                    IsActive      = true,
-                    CreatedAt     = DateTime.UtcNow
-                };
-                db.Users.Add(caller);
-                await db.SaveChangesAsync();
-                logger.LogInformation(
-                    "Auto-provisioned user {Email} as {Role} (OID {OId}) on first trip request",
-                    email, role, callerId);
-            }
-        }
+            return Unauthorized(new { error = "Cannot resolve user identity from token" });
 
         var trip = new Models.Entities.TripRequest
         {

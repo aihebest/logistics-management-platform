@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using LogisticsApi.Data;
 using LogisticsApi.Models.DTOs;
 using LogisticsApi.Models.Entities;
+using LogisticsApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,12 +11,12 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/material-transport")]
 [Authorize]
-public class MaterialTransportController(AppDbContext db) : ControllerBase
+public class MaterialTransportController(
+    AppDbContext db,
+    ICurrentUserService currentUser) : ControllerBase
 {
-    private string? CallerId => User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-    private async Task<Models.Entities.User?> GetCallerAsync() =>
-        await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == CallerId);
+    private Task<Models.Entities.User?> GetCallerAsync() =>
+        currentUser.ResolveOrProvisionAsync(User);
 
     // ── Generate form number: DEL-LG-FRM-009/YYYY/NNN ─────────────────────────
     private async Task<string> GenerateFormNumberAsync()
