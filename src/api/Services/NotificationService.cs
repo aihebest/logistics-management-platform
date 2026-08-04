@@ -14,6 +14,7 @@ public interface INotificationService
     Task SendTripRequestApprovedAsync(TripRequest trip);
     Task SendTripRequestRejectedAsync(TripRequest trip, string reason);
     Task SendTripCompletedAsync(TripRequest trip);
+    Task SendNoDriverAvailableAsync(TripRequest trip);
 
     // ── Assignment ──────────────────────────────────────────────────────────────
     Task SendAssignmentConfirmedAsync(Assignment assignment);
@@ -21,6 +22,9 @@ public interface INotificationService
     // ── Maintenance ─────────────────────────────────────────────────────────────
     Task SendMaintenanceDueAsync(MaintenanceRecord record, int daysUntilDue);
     Task SendMaintenanceOverdueAsync(MaintenanceRecord record);
+    Task SendEmergencyMaintenanceLoggedAsync(MaintenanceRecord record);
+    Task SendMaintenanceCompletedAsync(MaintenanceRecord record);
+    Task SendVehicleReturnedToServiceAsync(MaintenanceRecord record);
 
     // ── In-app ──────────────────────────────────────────────────────────────────
     Task NotifyInAppAsync(Guid recipientId, string type, string subject, string body,
@@ -206,6 +210,47 @@ public class NotificationService(
             await SendEmailAsync(email, subject, body);
     }
 
+    /// <summary>
+    /// A request was approved but no driver/vehicle is available. Alerts
+    /// coordinators and managers so they can arrange alternative capacity.
+    /// </summary>
+    public async Task SendNoDriverAvailableAsync(TripRequest trip)
+    {
+        var subject = $"No Driver/Vehicle Available — {trip.Purpose} ({trip.RequestedDateTime:dd MMM yyyy HH:mm})";
+        var body    = $"""
+            A trip request has been approved but cannot be assigned — no driver or
+            vehicle is currently available at the requested time.
+
+            Reference:   {trip.Id.ToString()[..8].ToUpper()}
+            Requested By:{trip.RequestedBy?.FullName ?? "Unknown"}
+            Purpose:     {trip.Purpose}
+            Pickup:      {trip.PickupLocation}
+            Destination: {trip.DestinationLocation}
+            Date/Time:   {trip.RequestedDateTime:f}
+            Priority:    {trip.Priority}
+
+            The request is sitting in the pending queue. Please arrange an alternative
+            driver/vehicle or contact the requester to reschedule.
+
+            {PlatformUrl()}
+            """;
+
+        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager", "Admin");
+        foreach (var email in recipients)
+            await SendEmailAsync(email, subject, body);
+
+        // In-app alert to coordinators/managers too
+        var users = await db.Users
+            .Where(u => u.IsActive && (u.Role == "Coordinator" || u.Role == "Manager" || u.Role == "Admin"))
+            .ToListAsync();
+        foreach (var u in users)
+            await NotifyInAppAsync(u.Id, "NoDriverAvailable", subject,
+                $"No capacity for: {trip.Purpose} — {trip.PickupLocation} → {trip.DestinationLocation}",
+                "TripRequest", trip.Id.ToString());
+
+        logger.LogWarning("No driver available alert sent for trip {TripId}", trip.Id);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ASSIGNMENT NOTIFICATION
     // ═══════════════════════════════════════════════════════════════════════════
@@ -294,6 +339,89 @@ public class NotificationService(
 
         await SendToMaintenanceTeamAsync(subject, body);
         logger.LogWarning("Overdue maintenance alert sent: {Vehicle} — {Days} days overdue", vehicle.RegistrationNo, daysOver);
+    }
+
+    /// <summary>
+    /// An emergency/fault maintenance record was logged. Notifies the Logistics
+    /// Manager and Supervisor immediately so repairs can be authorised.
+    /// </summary>
+    public async Task SendEmergencyMaintenanceLoggedAsync(MaintenanceRecord record)
+    {
+        var vehicle = record.Vehicle;
+        var subject = $"EMERGENCY Maintenance Logged — {vehicle.RegistrationNo}";
+        var body    = $"""
+            ⚠️ EMERGENCY / FAULT MAINTENANCE LOGGED — Action Required
+
+            Vehicle:        {vehicle.Make} {vehicle.Model} ({vehicle.RegistrationNo})
+            Fault Reported: {record.FaultDescription ?? record.Type}
+            Date Reported:  {(record.DateReported?.ToString("f") ?? DateTime.UtcNow.ToString("f"))}
+            Logged Type:    {record.Type}
+            Vendor:         {record.VendorName ?? "Not yet assigned"}
+            Notes:          {record.Notes ?? "None"}
+
+            The vehicle has been placed In Maintenance and is not available for trips.
+            Please authorise repairs and arrange an alternative vehicle if needed.
+
+            {PlatformUrl()}
+            """;
+
+        await SendToMaintenanceTeamAsync(subject, body);
+        logger.LogWarning("Emergency maintenance alert sent: {Vehicle}", vehicle.RegistrationNo);
+    }
+
+    /// <summary>
+    /// Maintenance was completed. Notifies Logistics Manager and Coordinator with
+    /// the service summary and cost for budget records.
+    /// </summary>
+    public async Task SendMaintenanceCompletedAsync(MaintenanceRecord record)
+    {
+        var vehicle = record.Vehicle;
+        var subject = $"Maintenance Completed — {vehicle.RegistrationNo}";
+        var body    = $"""
+            Maintenance has been completed and signed off.
+
+            Vehicle:        {vehicle.Make} {vehicle.Model} ({vehicle.RegistrationNo})
+            Service Type:   {record.Type}
+            Completed:      {(record.CompletedDate?.ToString("D") ?? DateTime.UtcNow.ToString("D"))}
+            Cost:           {(record.Cost.HasValue ? record.Cost.Value.ToString("N2") : "Not recorded")}
+            Vendor:         {record.VendorName ?? "Not specified"}
+            Parts Replaced: {record.PartsReplaced ?? "None recorded"}
+            Next Service:   {(vehicle.NextServiceDate?.ToString("D") ?? "See schedule")}
+
+            {PlatformUrl()}
+            """;
+
+        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager", "Admin");
+        foreach (var email in recipients)
+            await SendEmailAsync(email, subject, body);
+
+        logger.LogInformation("Maintenance completed notification sent: {Vehicle}", vehicle.RegistrationNo);
+    }
+
+    /// <summary>
+    /// A vehicle has been returned to Available status after maintenance.
+    /// Notifies coordinators it can be assigned again.
+    /// </summary>
+    public async Task SendVehicleReturnedToServiceAsync(MaintenanceRecord record)
+    {
+        var vehicle = record.Vehicle;
+        var subject = $"Vehicle Back In Service — {vehicle.RegistrationNo}";
+        var body    = $"""
+            The following vehicle has completed maintenance and is now Available for
+            assignment.
+
+            Vehicle:      {vehicle.Make} {vehicle.Model} ({vehicle.RegistrationNo})
+            Service Done: {record.Type}
+            Completed:    {(record.CompletedDate?.ToString("D") ?? DateTime.UtcNow.ToString("D"))}
+
+            {PlatformUrl()}
+            """;
+
+        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager", "Admin");
+        foreach (var email in recipients)
+            await SendEmailAsync(email, subject, body);
+
+        logger.LogInformation("Vehicle returned to service notification sent: {Vehicle}", vehicle.RegistrationNo);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using LogisticsApi.Data;
 using LogisticsApi.Models.DTOs;
 using LogisticsApi.Services;
@@ -60,6 +59,18 @@ public class TripRequestsController(
         if (caller == null)
             return Unauthorized(new { error = "Cannot resolve user identity from token" });
 
+        // ── Business rule: submit at least 24 hours in advance ────────────────
+        // Urgent-priority requests are exempt so genuine emergencies aren't blocked.
+        var isUrgent = string.Equals(dto.Priority, "Urgent", StringComparison.OrdinalIgnoreCase);
+        if (!isUrgent && dto.RequestedDateTime < DateTime.UtcNow.AddHours(24))
+        {
+            return BadRequest(new
+            {
+                error = "Trip requests must be submitted at least 24 hours in advance. " +
+                        "For same-day or next-day travel, set the priority to Urgent."
+            });
+        }
+
         var trip = new Models.Entities.TripRequest
         {
             Id                  = Guid.NewGuid(),
@@ -68,7 +79,7 @@ public class TripRequestsController(
             PickupLocation      = dto.PickupLocation,
             DestinationLocation = dto.DestinationLocation,
             RequestedDateTime   = dto.RequestedDateTime,
-            Status              = "Pending",
+            Status              = "Pending",   // awaits coordinator/manager approval
             Priority            = dto.Priority,
             Notes               = dto.Notes,
             MovementType        = dto.MovementType,
@@ -81,16 +92,14 @@ public class TripRequestsController(
         db.TripRequests.Add(trip);
         await db.SaveChangesAsync();
 
-        // Send submission confirmation to requester + alert coordinators/managers
-        // Wrapped in try/catch so notification failures never block trip creation
+        // Notify coordinators/managers to review + confirm receipt to the requester.
+        // Assignment does NOT happen here — a coordinator/manager must approve first
+        // (Interstate/International approvals are restricted to Manager/Admin).
+        // Wrapped in try/catch so notification failures never block trip creation.
         trip.RequestedBy = caller;
         try { await notifications.SendTripRequestSubmittedAsync(trip); }
         catch (Exception ex) { logger.LogError(ex, "Notification failed for trip {TripId} — trip was saved successfully", trip.Id); }
 
-        // Attempt auto-assignment
-        await engine.AssignAsync(trip, caller.Id);
-
-        // Reload with nav props for the response
         var result = await db.TripRequests
             .Include(x => x.RequestedBy)
             .Include(x => x.Assignment).ThenInclude(a => a!.Driver)
@@ -118,6 +127,19 @@ public class TripRequestsController(
         if (trip.Status is "Completed" or "Cancelled")
             return BadRequest(new { error = $"Cannot approve a {trip.Status} request." });
 
+        // ── Interstate / International require Manager or Admin approval ───────
+        // Coordinators can approve IntraState trips, but interstate and international
+        // movements must be signed off by a Manager or Admin per company policy.
+        var isLongDistance = trip.MovementType is "Interstate" or "International";
+        var isManager = User.IsInRole("Manager") || User.IsInRole("Admin");
+        if (isLongDistance && !isManager)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = $"{trip.MovementType} movements require Manager or Admin approval before a driver is assigned."
+            });
+        }
+
         // If manual driver/vehicle supplied, create assignment now
         if (dto?.DriverId.HasValue == true && dto?.VehicleId.HasValue == true)
         {
@@ -140,11 +162,11 @@ public class TripRequestsController(
 
             driver.DriverStatus     = "OnAssignment";
             driver.LastStatusChange = DateTime.UtcNow;
-            vehicle.Status          = "OnAssignment";
+            vehicle.Status          = "Assigned";
             vehicle.UpdatedAt       = DateTime.UtcNow;
 
             db.Assignments.Add(assignment);
-            trip.Status = "Assigned";
+            trip.Status = "Active";   // approved & driver assigned — trip is now live
             await db.SaveChangesAsync();
 
             // Reload navigation properties for notifications
@@ -157,18 +179,20 @@ public class TripRequestsController(
         else
         {
             // Auto-assignment
-            var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var caller   = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
+            var caller = await currentUser.ResolveOrProvisionAsync(User);
             await engine.AssignAsync(trip, caller?.Id ?? Guid.Empty);
 
             // Reload to check if auto-assignment succeeded
             await db.Entry(trip).ReloadAsync();
             if (trip.Status == "Pending")
             {
-                // No driver available — still notify requester the request was seen
+                // Approved, but no driver/vehicle available right now.
                 trip.Status = "Approved";
                 await db.SaveChangesAsync();
+                // Tell the requester it's approved, and alert coordinators/managers
+                // that the request is stuck waiting for capacity.
                 await notifications.SendTripRequestApprovedAsync(trip);
+                await notifications.SendNoDriverAvailableAsync(trip);
             }
         }
 
@@ -235,6 +259,27 @@ public class TripRequestsController(
                 trip.Assignment.Vehicle.UpdatedAt = DateTime.UtcNow;
             }
         }
+
+        // Auto-log the completed trip in the Movement Register (closed entry),
+        // so every completed movement has a permanent timestamped record.
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
+        db.MovementRegisters.Add(new Models.Entities.MovementRegister
+        {
+            Id               = Guid.NewGuid(),
+            MovementType     = "VehicleOut",
+            VehicleId        = trip.Assignment?.VehicleId,
+            DriverId         = trip.Assignment?.DriverId,
+            RelatedRefNo     = trip.Id.ToString()[..8].ToUpper(),
+            Purpose          = trip.Purpose,
+            Origin           = trip.PickupLocation,
+            Destination      = trip.DestinationLocation,
+            MovementDateTime = trip.Assignment?.StartTime ?? trip.RequestedDateTime,
+            ReturnDateTime   = DateTime.UtcNow,
+            Status           = "Closed",
+            Notes            = $"Auto-logged on trip completion. Priority: {trip.Priority}.",
+            LoggedById       = caller?.Id ?? trip.RequestedById,
+            CreatedAt        = DateTime.UtcNow
+        });
 
         await db.SaveChangesAsync();
         await notifications.SendTripCompletedAsync(trip);

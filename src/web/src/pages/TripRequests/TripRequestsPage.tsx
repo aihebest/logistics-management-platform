@@ -6,7 +6,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 
-const STATUS_FILTER = ['', 'Pending', 'Active', 'Ongoing', 'Unattended', 'Completed', 'Cancelled']
+const STATUS_FILTER = ['', 'Pending', 'Approved', 'Active', 'Ongoing', 'Unattended', 'Completed', 'Rejected', 'Cancelled']
 const MOVEMENT_TYPES = ['IntraState', 'Interstate', 'International']
 
 const LOCATIONS = [
@@ -165,7 +165,7 @@ export default function TripRequestsPage() {
                   </p>
                 )}
               </div>
-              {(t.status === 'Pending' || t.status === 'Active') && (
+              {(t.status === 'Pending' || t.status === 'Approved' || t.status === 'Active') && (
                 <button
                   className="btn-secondary text-xs"
                   onClick={() => cancelTrip.mutate(t.id)}
