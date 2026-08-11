@@ -2,6 +2,7 @@ using System.Security.Claims;
 using LogisticsApi.Data;
 using LogisticsApi.Models.DTOs;
 using LogisticsApi.Models.Entities;
+using LogisticsApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -23,10 +24,35 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/auth")]
 [Authorize]
-public class AuthController(AppDbContext db) : ControllerBase
+public class AuthController(AppDbContext db, ICurrentUserService currentUser) : ControllerBase
 {
+    /// <summary>
+    /// Resolves (and provisions if needed) the caller's platform record.
+    /// Uses the shared resolver so identity resolution is identical everywhere
+    /// and tolerant of Entra claim-name variations.
+    /// </summary>
     [HttpGet("me")]
     public async Task<ActionResult<UserDto>> Me()
+    {
+        var resolved = await currentUser.ResolveOrProvisionAsync(User);
+        if (resolved == null)
+            return Unauthorized(new { error = "Cannot resolve user identity from token" });
+
+        return ToDto(resolved);
+    }
+
+    /// <summary>
+    /// Diagnostic: lists the claims present on the caller's token. Useful when
+    /// identity resolution fails and we need to see what Entra actually sent.
+    /// </summary>
+    [HttpGet("claims")]
+    public ActionResult<object> Claims() => Ok(new
+    {
+        claims = User.Claims.Select(c => new { c.Type, c.Value }).ToList()
+    });
+
+    [HttpGet("me-legacy")]
+    public async Task<ActionResult<UserDto>> MeLegacy()
     {
         var entraOid = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(entraOid)) return Unauthorized();

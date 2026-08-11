@@ -28,38 +28,72 @@ public class CurrentUserService(AppDbContext db, ILogger<CurrentUserService> log
 {
     public async Task<User?> ResolveOrProvisionAsync(ClaimsPrincipal principal)
     {
+        // Entra / Microsoft.Identity.Web can surface the object id under several
+        // claim names depending on token version and whether inbound claim
+        // mapping is enabled. Check every known variant, then fall back to the
+        // subject claim, so identity resolution never depends on one spelling.
         var oid = principal.FindFirstValue("oid")
                ?? principal.FindFirstValue("http://schemas.microsoft.com/identity/claims/objectidentifier")
-               ?? principal.FindFirstValue(ClaimTypes.NameIdentifier);
+               ?? principal.FindFirstValue(ClaimTypes.NameIdentifier)
+               ?? principal.FindFirstValue("sub")
+               ?? principal.FindFirstValue("uid");
 
+        var email = (principal.FindFirstValue("preferred_username")
+                  ?? principal.FindFirstValue("upn")
+                  ?? principal.FindFirstValue("email")
+                  ?? principal.FindFirstValue(ClaimTypes.Email)
+                  ?? principal.FindFirstValue(ClaimTypes.Upn)
+                  ?? principal.FindFirstValue("unique_name")
+                  ?? "").ToLowerInvariant().Trim();
+
+        // If no object id is present at all, fall back to identifying the user by
+        // email. Without either we genuinely cannot identify the caller.
         if (string.IsNullOrEmpty(oid))
-            return null;
+        {
+            if (string.IsNullOrEmpty(email))
+            {
+                logger.LogError(
+                    "Cannot resolve caller: token carried no object-id or email claim. Claims present: {Claims}",
+                    string.Join(", ", principal.Claims.Select(c => c.Type)));
+                return null;
+            }
+
+            logger.LogWarning(
+                "Token had no object-id claim; falling back to email identity for {Email}. Claims present: {Claims}",
+                email, string.Join(", ", principal.Claims.Select(c => c.Type)));
+
+            var byEmail = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (byEmail != null) return byEmail;
+
+            // Synthesise a stable id from the email so repeat logins map to the
+            // same record; a later login carrying a real oid will relink it.
+            oid = $"email-{email}";
+        }
 
         // 1. Exact OID match — the common case for returning users.
         var user = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == oid);
         if (user != null)
             return user;
 
-        var email = (principal.FindFirstValue("preferred_username")
-                  ?? principal.FindFirstValue(ClaimTypes.Email)
-                  ?? "").ToLowerInvariant().Trim();
-
-        // 2. Pre-registered placeholder matched by email — link the real OID.
+        // 1b. Known email but a different/placeholder stored id — relink to the
+        //     current token's id so future lookups hit the fast path above.
         if (!string.IsNullOrEmpty(email))
         {
-            var preRegistered = await db.Users
-                .FirstOrDefaultAsync(u => u.Email == email && u.EntraObjectId.StartsWith("pre-"));
-
-            if (preRegistered != null)
+            var existingByEmail = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (existingByEmail != null)
             {
-                preRegistered.EntraObjectId = oid;
+                existingByEmail.EntraObjectId = oid;
                 await db.SaveChangesAsync();
-                return preRegistered;
+                return existingByEmail;
             }
         }
 
-        // 3. Auto-create, deriving the platform role from the Entra ID app roles.
-        var tokenRoles = principal.FindAll("roles").Select(c => c.Value).ToList();
+        // 2. Auto-create, deriving the platform role from the Entra ID app roles.
+        //    Role claims also vary by mapping config, so read both spellings.
+        var tokenRoles = principal.FindAll("roles").Select(c => c.Value)
+            .Concat(principal.FindAll(ClaimTypes.Role).Select(c => c.Value))
+            .Distinct()
+            .ToList();
         var role = tokenRoles.Contains("Admin")       ? "Admin"
                  : tokenRoles.Contains("Manager")     ? "Manager"
                  : tokenRoles.Contains("Coordinator") ? "Coordinator"
