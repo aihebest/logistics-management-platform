@@ -88,6 +88,11 @@ public class MaterialTransportController(
             CreatedAt = DateTime.UtcNow
         };
 
+        // Guard against a null/empty Items list — a request with no materials is
+        // invalid, and iterating a null list would throw a 500.
+        if (dto.Items is null || dto.Items.Count == 0)
+            return BadRequest(new { error = "Add at least one material row before submitting." });
+
         foreach (var item in dto.Items)
         {
             request.Items.Add(new MaterialTransportItem
