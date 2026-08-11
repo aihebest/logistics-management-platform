@@ -50,8 +50,25 @@ export function apiErrorMessage(err: unknown, fallback = 'Something went wrong. 
     }
 
     if (data?.title) return data.title
-    if (err.response?.status === 401) return 'Your session expired. Please sign in again.'
-    if (err.response?.status === 403) return 'You do not have permission to do that.'
+
+    const status = err.response?.status
+
+    if (status === 401) return 'Your session expired. Please sign in again.'
+    if (status === 403) return 'You do not have permission to do that.'
+    if (status === 429) return 'Too many requests — wait a moment and try again.'
+
+    // No readable body. Surface the status (and any raw text) so the failure is
+    // still diagnosable instead of showing an opaque "Failed to..." message.
+    if (status) {
+      const raw = typeof err.response?.data === 'string' ? err.response.data.slice(0, 140) : ''
+      if (status >= 500) {
+        return `${fallback} — server error (HTTP ${status}). Please report this.${raw ? ` ${raw}` : ''}`
+      }
+      return `${fallback} (HTTP ${status})${raw ? ` — ${raw}` : ''}`
+    }
+
+    // No response at all: network failure, CORS block, or request never sent.
+    return `${fallback} — could not reach the server. Check your connection, then sign out and back in.`
   }
   return fallback
 }

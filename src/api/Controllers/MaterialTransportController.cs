@@ -13,7 +13,8 @@ namespace LogisticsApi.Controllers;
 [Authorize]
 public class MaterialTransportController(
     AppDbContext db,
-    ICurrentUserService currentUser) : ControllerBase
+    ICurrentUserService currentUser,
+    ILogger<MaterialTransportController> logger) : ControllerBase
 {
     private Task<Models.Entities.User?> GetCallerAsync() =>
         currentUser.ResolveOrProvisionAsync(User);
@@ -85,7 +86,8 @@ public class MaterialTransportController(
             DeliveryContactPhone = dto.DeliveryContactPhone,
             DeliveryDate = dto.DeliveryDate,
             Status = "PendingHOD",
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
 
         // Guard against a null/empty Items list — a request with no materials is
@@ -105,11 +107,28 @@ public class MaterialTransportController(
             });
         }
 
-        db.MaterialTransportRequests.Add(request);
-        await db.SaveChangesAsync();
+        try
+        {
+            db.MaterialTransportRequests.Add(request);
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Material transport save failed for {Email}. Form {FormNo}, {ItemCount} items",
+                caller.Email, formNo, request.Items.Count);
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                error = "Could not save the material transport request. " +
+                        "The logistics team has been notified — please try again."
+            });
+        }
 
-        return CreatedAtAction(nameof(Get), new { id = request.Id },
-            await GetFullDto(request.Id));
+        logger.LogInformation("Material transport request {FormNo} created by {Email}", formNo, caller.Email);
+
+        // Return the saved record directly. (Previously used CreatedAtAction, whose
+        // route generation is an avoidable extra failure mode on the success path.)
+        return Ok(await GetFullDto(request.Id));
     }
 
     // ── HOD Approval ──────────────────────────────────────────────────────────
