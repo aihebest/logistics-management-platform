@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { assignmentsApi, vehiclesApi, driversApi, tripsApi } from '../../services/api'
+import { assignmentsApi, vehiclesApi, driversApi, tripsApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useAuth } from '../../auth/useAuth'
@@ -54,7 +54,7 @@ export default function AssignmentsPage() {
       setUpdatingId(null)
       toast.success('Assignment status updated')
     },
-    onError: () => toast.error('Failed to update status'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to update status'), { duration: 6000 }),
   })
 
   if (isLoading) return <PageLoader />

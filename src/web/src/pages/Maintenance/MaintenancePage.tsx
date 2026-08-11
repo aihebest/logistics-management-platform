@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { maintenanceApi, vehiclesApi, notificationsApi } from '../../services/api'
+import { maintenanceApi, vehiclesApi, notificationsApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import toast from 'react-hot-toast'
@@ -54,7 +54,7 @@ export default function MaintenancePage() {
       setShowForm(false)
       toast.success('Maintenance record created')
     },
-    onError: () => toast.error('Failed to create record'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to create record'), { duration: 6000 }),
   })
 
   const completeRecord = useMutation({
@@ -71,7 +71,7 @@ export default function MaintenancePage() {
       setSelectedDepts([])
       setNotifyMessage('')
     },
-    onError: () => toast.error('Failed to send notifications'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to send notifications'), { duration: 6000 }),
   })
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {

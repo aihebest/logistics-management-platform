@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { tripsApi } from '../../services/api'
+import { tripsApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import toast from 'react-hot-toast'
@@ -23,10 +23,28 @@ const LOCATIONS = [
   'Nnamdi Azikiwe Int\'l Airport, Abuja',
 ]
 
+/** Local datetime string ("yyyy-MM-ddTHH:mm") N hours from now, for datetime-local inputs. */
+function localDateTimeIn(hours: number) {
+  const d = new Date(Date.now() + hours * 60 * 60 * 1000)
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+  return d.toISOString().slice(0, 16)
+}
+
+/** Local date string ("yyyy-MM-dd") N hours from now, for date inputs. */
+function localDateIn(hours: number) {
+  return localDateTimeIn(hours).slice(0, 10)
+}
+
 export default function TripRequestsPage() {
   const qc = useQueryClient()
   const [statusFilter, setStatusFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
+
+  // Requests must be at least 24h out (unless Urgent), so default the form to
+  // ~25h ahead and stop the date picker offering anything earlier.
+  const minDateTime = localDateTimeIn(24)
+  const defaultDateTime = localDateTimeIn(25)
+  const defaultDate = localDateIn(25)
 
   const { data: trips = [], isLoading } = useQuery({
     queryKey: ['trips', statusFilter],
@@ -40,7 +58,9 @@ export default function TripRequestsPage() {
       setShowForm(false)
       toast.success('Trip request submitted')
     },
-    onError: () => toast.error('Failed to create trip request'),
+    // Surface the API's actual reason (e.g. the 24-hour advance rule) instead
+    // of a generic failure message the user can't act on.
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to create trip request'), { duration: 6000 }),
   })
 
   const cancelTrip = useMutation({
@@ -117,11 +137,27 @@ export default function TripRequestsPage() {
             </div>
             <div>
               <label className="label">Requested Date & Time</label>
-              <input name="requestedDateTime" type="datetime-local" className="input" required />
+              <input
+                name="requestedDateTime"
+                type="datetime-local"
+                className="input"
+                defaultValue={defaultDateTime}
+                min={minDateTime}
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Must be at least 24 hours ahead. For short notice, set Priority to Urgent.
+              </p>
             </div>
             <div>
               <label className="label">Departure Date</label>
-              <input name="departureDate" type="date" className="input" />
+              <input
+                name="departureDate"
+                type="date"
+                className="input"
+                defaultValue={defaultDate}
+                min={localDateIn(0)}
+              />
             </div>
             <div>
               <label className="label">Departure Time</label>

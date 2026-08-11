@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { vehiclesApi, maintenanceApi, type Vehicle } from '../../services/api'
+import { vehiclesApi, maintenanceApi, type Vehicle, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useAuth } from '../../auth/useAuth'
@@ -33,7 +33,7 @@ export default function VehiclesPage() {
       setShowForm(false)
       toast.success('Vehicle added')
     },
-    onError: () => toast.error('Failed to create vehicle'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to create vehicle'), { duration: 6000 }),
   })
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {

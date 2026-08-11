@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { travelApi } from '../../services/api'
+import { travelApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useAuth } from '../../auth/useAuth'
@@ -30,7 +30,7 @@ export default function TravelRequestPage() {
   const createRequest = useMutation({
     mutationFn: travelApi.create,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['travel'] }); setShowForm(false); toast.success('Travel request submitted') },
-    onError: () => toast.error('Failed to submit request'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to submit request'), { duration: 6000 }),
   })
 
   const approveRequest = useMutation({

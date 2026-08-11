@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { movementRegisterApi, vehiclesApi, driversApi } from '../../services/api'
+import { movementRegisterApi, vehiclesApi, driversApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
@@ -39,7 +39,7 @@ export default function MovementRegisterPage() {
   const createMovement = useMutation({
     mutationFn: movementRegisterApi.create,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['movement-register'] }); setShowForm(false); toast.success('Movement logged') },
-    onError: () => toast.error('Failed to log movement'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to log movement'), { duration: 6000 }),
   })
 
   const closeMovement = useMutation({

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fuelApi, vehiclesApi, locationsApi } from '../../services/api'
+import { fuelApi, vehiclesApi, locationsApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
@@ -37,7 +37,7 @@ export default function FuelPage() {
       setShowForm(false)
       toast.success('Fuel log recorded')
     },
-    onError: () => toast.error('Failed to save fuel log'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to save fuel log'), { duration: 6000 }),
   })
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { driversApi, driverIncidentsApi } from '../../services/api'
+import { driversApi, driverIncidentsApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useAuth } from '../../auth/useAuth'
@@ -37,7 +37,7 @@ export default function DriverPerformancePage() {
       setShowIncidentForm(false)
       toast.success('Incident recorded')
     },
-    onError: () => toast.error('Failed to record incident'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to record incident'), { duration: 6000 }),
   })
 
   const handleIncident = (e: React.FormEvent<HTMLFormElement>) => {

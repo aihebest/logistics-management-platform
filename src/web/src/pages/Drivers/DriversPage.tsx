@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { driversApi } from '../../services/api'
+import { driversApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useAuth } from '../../auth/useAuth'
@@ -27,7 +27,7 @@ export default function DriversPage() {
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       toast.success('Status updated')
     },
-    onError: () => toast.error('Failed to update status'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to update status'), { duration: 6000 }),
   })
 
   const registerDriver = useMutation({

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { materialTransportApi, vehiclesApi, driversApi } from '../../services/api'
+import { materialTransportApi, vehiclesApi, driversApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
@@ -39,7 +39,7 @@ export default function MaterialTransportPage() {
   const createRequest = useMutation({
     mutationFn: materialTransportApi.create,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['material-transport'] }); setShowForm(false); toast.success('Request submitted — pending HOD approval') },
-    onError: () => toast.error('Failed to submit request'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to submit request'), { duration: 6000 }),
   })
 
   const hodApproval = useMutation({

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { projectMaterialsApi } from '../../services/api'
+import { projectMaterialsApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
@@ -35,13 +35,13 @@ export default function ProjectMaterialsPage() {
   const createEntry = useMutation({
     mutationFn: projectMaterialsApi.create,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['project-materials'] }); setShowForm(false); toast.success('Entry added') },
-    onError: () => toast.error('Failed to add entry'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to add entry'), { duration: 6000 }),
   })
 
   const updateEntry = useMutation({
     mutationFn: ({ id, data }: { id: string; data: object }) => projectMaterialsApi.update(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['project-materials'] }); setEditingId(null); toast.success('Entry updated') },
-    onError: () => toast.error('Failed to update'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to update'), { duration: 6000 }),
   })
 
   const deleteEntry = useMutation({

@@ -27,6 +27,35 @@ api.interceptors.request.use(async config => {
   return config
 })
 
+/**
+ * Pull a human-readable message out of an API error.
+ *
+ * The API returns validation and business-rule failures as
+ * `{ error: "..." }` with a 4xx status. Without this, the UI showed a
+ * generic "Failed to..." toast and the user never learned the real reason
+ * (e.g. the 24-hour advance rule).
+ */
+export function apiErrorMessage(err: unknown, fallback = 'Something went wrong. Please try again.'): string {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data as
+      | { error?: string; title?: string; errors?: Record<string, string[]> }
+      | undefined
+
+    if (data?.error) return data.error
+
+    // ASP.NET model-validation payload: { errors: { Field: ["msg"] } }
+    if (data?.errors) {
+      const first = Object.values(data.errors).flat()[0]
+      if (first) return first
+    }
+
+    if (data?.title) return data.title
+    if (err.response?.status === 401) return 'Your session expired. Please sign in again.'
+    if (err.response?.status === 403) return 'You do not have permission to do that.'
+  }
+  return fallback
+}
+
 // ── Core Types ────────────────────────────────────────────────────────────────
 
 export interface Location {

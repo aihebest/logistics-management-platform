@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { driverScheduleApi, driversApi, locationsApi } from '../../services/api'
+import { driverScheduleApi, driversApi, locationsApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
@@ -75,7 +75,7 @@ export default function DriverSchedulePage() {
       setShowForm(false)
       toast.success('Schedule saved')
     },
-    onError: () => toast.error('Failed to save schedule'),
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to save schedule'), { duration: 6000 }),
   })
 
   const deleteSchedule = useMutation({
