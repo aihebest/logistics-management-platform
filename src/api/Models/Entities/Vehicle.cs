@@ -16,6 +16,12 @@ public class Vehicle
     public DateOnly? LastServiceDate { get; set; }
     public DateOnly? NextServiceDate { get; set; }
     public Guid? AssignedMechanicId { get; set; }
+    /// <summary>
+    /// Fixed-asset tag from the company asset register (e.g. "5550000190").
+    /// Lets the platform be reconciled against the Repairs &amp; Maintenance
+    /// Register and the finance asset list.
+    /// </summary>
+    public string? AssetTagNo { get; set; }
     // Phase 1 additions
     public string? ChassisNo { get; set; }
     public short? PurchaseYear { get; set; }

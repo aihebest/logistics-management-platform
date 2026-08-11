@@ -56,6 +56,7 @@ public class VehiclesController(AppDbContext db) : ControllerBase
             ChassisNo = dto.ChassisNo,
             PurchaseYear = dto.PurchaseYear,
             Colour = dto.Colour,
+            AssetTagNo = dto.AssetTagNo,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -80,6 +81,29 @@ public class VehiclesController(AppDbContext db) : ControllerBase
         if (dto.ChassisNo != null) vehicle.ChassisNo = dto.ChassisNo;
         if (dto.PurchaseYear.HasValue) vehicle.PurchaseYear = dto.PurchaseYear;
         if (dto.Colour != null) vehicle.Colour = dto.Colour;
+
+        // Descriptive fields — allow completing records imported from the asset
+        // register with missing year/fuel type, or correcting make/model typos.
+        if (!string.IsNullOrWhiteSpace(dto.Make))     vehicle.Make     = dto.Make.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Model))    vehicle.Model    = dto.Model.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.FuelType)) vehicle.FuelType = dto.FuelType.Trim();
+        if (dto.AssetTagNo != null) vehicle.AssetTagNo = string.IsNullOrWhiteSpace(dto.AssetTagNo) ? null : dto.AssetTagNo.Trim();
+        if (dto.Year.HasValue && dto.Year.Value > 0) vehicle.Year = dto.Year.Value;
+        if (dto.ServiceIntervalKm.HasValue && dto.ServiceIntervalKm.Value > 0)
+            vehicle.ServiceIntervalKm = dto.ServiceIntervalKm.Value;
+        if (dto.MileageAtPurchase.HasValue) vehicle.MileageAtPurchase = dto.MileageAtPurchase;
+        if (dto.PreviousMileageAtPurchase.HasValue) vehicle.PreviousMileageAtPurchase = dto.PreviousMileageAtPurchase;
+
+        // Registration is the unique business key — guard against collisions.
+        if (!string.IsNullOrWhiteSpace(dto.RegistrationNo))
+        {
+            var reg = dto.RegistrationNo.Trim().ToUpperInvariant();
+            if (reg != vehicle.RegistrationNo &&
+                await db.Vehicles.AnyAsync(v => v.RegistrationNo == reg && v.Id != id))
+                return Conflict(new { error = $"Another vehicle is already registered as {reg}." });
+            vehicle.RegistrationNo = reg;
+        }
+
         vehicle.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
@@ -91,6 +115,7 @@ public class VehiclesController(AppDbContext db) : ControllerBase
         v.OdometerKm, v.MileageAtPurchase, v.PreviousMileageAtPurchase,
         v.ServiceIntervalKm, v.LastServiceDate, v.NextServiceDate,
         v.AssignedMechanic?.FullName,
-        v.ChassisNo, v.PurchaseYear, v.Colour,
-        DateTime.UtcNow.Year - v.Year);
+        v.ChassisNo, v.PurchaseYear, v.Colour, v.AssetTagNo,
+        // Year 0 means "not yet recorded" — report age 0 rather than ~2026.
+        v.Year > 0 ? DateTime.UtcNow.Year - v.Year : 0);
 }

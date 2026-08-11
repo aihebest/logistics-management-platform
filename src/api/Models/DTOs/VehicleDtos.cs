@@ -19,6 +19,7 @@ public record VehicleDto(
     string? ChassisNo,
     short? PurchaseYear,
     string? Colour,
+    string? AssetTagNo,     // fixed-asset register tag
     int VehicleAge          // calculated: current year - Year
 );
 
@@ -34,9 +35,16 @@ public record CreateVehicleDto(
     short? PurchaseYear = null,
     string? Colour = null,
     int? MileageAtPurchase = null,
-    int? PreviousMileageAtPurchase = null
+    int? PreviousMileageAtPurchase = null,
+    string? AssetTagNo = null
 );
 
+/// <summary>
+/// Partial update — every field is optional and only supplied values are applied.
+/// Includes the core descriptive fields (make, model, year, fuel type, asset tag)
+/// so records imported from the asset register with missing data can be completed
+/// in the UI later.
+/// </summary>
 public record UpdateVehicleDto(
     string? Status,
     int? OdometerKm,
@@ -45,5 +53,15 @@ public record UpdateVehicleDto(
     Guid? AssignedMechanicId,
     string? ChassisNo,
     short? PurchaseYear,
-    string? Colour
+    string? Colour,
+    // Editable descriptive fields — fill in blanks left by the bulk import
+    string? RegistrationNo = null,
+    string? Make = null,
+    string? Model = null,
+    short? Year = null,
+    string? FuelType = null,
+    string? AssetTagNo = null,
+    int? ServiceIntervalKm = null,
+    int? MileageAtPurchase = null,
+    int? PreviousMileageAtPurchase = null
 );

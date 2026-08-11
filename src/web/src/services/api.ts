@@ -97,6 +97,7 @@ export interface Vehicle {
   chassisNo?: string
   purchaseYear?: number
   colour?: string
+  assetTagNo?: string
   vehicleAge: number
 }
 

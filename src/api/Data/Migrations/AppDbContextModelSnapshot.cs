@@ -161,6 +161,7 @@ namespace LogisticsApi.Data.Migrations
             {
                 b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");
                 b.Property<Guid?>("AssignedMechanicId").HasColumnType("uniqueidentifier");
+                b.Property<string>("AssetTagNo").HasMaxLength(40).HasColumnType("nvarchar(40)");
                 b.Property<DateTime>("CreatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
                 b.Property<string>("FuelType").IsRequired().HasMaxLength(20).HasColumnType("nvarchar(20)").HasDefaultValue("Diesel");
                 b.Property<DateOnly?>("LastServiceDate").HasColumnType("date");
@@ -176,6 +177,7 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<DateTime>("UpdatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
                 b.Property<short>("Year").HasColumnType("smallint");
                 b.HasKey("Id");
+                b.HasIndex("AssetTagNo");
                 b.HasIndex("AssignedMechanicId");
                 b.HasIndex("RegistrationNo").IsUnique();
                 b.ToTable("Vehicles");
