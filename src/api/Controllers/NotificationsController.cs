@@ -1,6 +1,6 @@
-using System.Security.Claims;
 using LogisticsApi.Data;
 using LogisticsApi.Models.DTOs;
+using LogisticsApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,13 +10,12 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/notifications")]
 [Authorize]
-public class NotificationsController(AppDbContext db) : ControllerBase
+public class NotificationsController(AppDbContext db, ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
     public async Task<IEnumerable<NotificationDto>> GetMine()
     {
-        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
+        var user = await currentUser.ResolveOrProvisionAsync(User);
         if (user == null) return [];
 
         return await db.Notifications
@@ -27,11 +26,22 @@ public class NotificationsController(AppDbContext db) : ControllerBase
             .ToListAsync();
     }
 
+    /// <summary>
+    /// Marks one of the caller's own notifications as read. The recipient check
+    /// prevents a user marking another person's notifications via a guessed id.
+    /// </summary>
     [HttpPatch("{id:guid}/read")]
     public async Task<IActionResult> MarkRead(Guid id)
     {
+        var user = await currentUser.ResolveOrProvisionAsync(User);
+        if (user == null) return Unauthorized();
+
         var n = await db.Notifications.FindAsync(id);
         if (n == null) return NotFound();
+
+        // Don't reveal that someone else's notification exists — treat as missing.
+        if (n.RecipientId != user.Id) return NotFound();
+
         n.IsRead = true;
         await db.SaveChangesAsync();
         return NoContent();
@@ -40,8 +50,7 @@ public class NotificationsController(AppDbContext db) : ControllerBase
     [HttpPatch("read-all")]
     public async Task<IActionResult> MarkAllRead()
     {
-        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == callerId);
+        var user = await currentUser.ResolveOrProvisionAsync(User);
         if (user == null) return NoContent();
 
         await db.Notifications

@@ -287,11 +287,38 @@ public class TripRequestsController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Cancels a trip request.
+    ///
+    /// Only the person who raised the request, or operations staff
+    /// (Coordinator/Manager/Admin), may cancel it. Without this check any
+    /// signed-in user could cancel anyone else's trip.
+    /// </summary>
     [HttpPatch("{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid id)
     {
         var trip = await db.TripRequests.Include(t => t.Assignment).FirstOrDefaultAsync(t => t.Id == id);
         if (trip == null) return NotFound();
+
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
+        if (caller == null)
+            return Unauthorized(new { error = "Cannot resolve user identity from token" });
+
+        var isOwner = trip.RequestedById == caller.Id;
+        if (!isOwner && !User.IsOperationsStaff())
+        {
+            logger.LogWarning(
+                "User {Email} attempted to cancel trip {TripId} raised by another user",
+                caller.Email, trip.Id);
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "You can only cancel trip requests that you raised. " +
+                        "Ask a coordinator or manager to cancel this one."
+            });
+        }
+
+        if (trip.Status is "Completed" or "Cancelled")
+            return BadRequest(new { error = $"This request is already {trip.Status}." });
 
         trip.Status = "Cancelled";
         if (trip.Assignment != null)

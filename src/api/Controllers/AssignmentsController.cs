@@ -111,8 +111,8 @@ public class AssignmentsController(AppDbContext db, INotificationService notific
 
         await db.SaveChangesAsync();
 
-        var callerId = User.FindFirstValue("oid") ?? "";
-        var email = User.FindFirstValue("preferred_username") ?? "";
+        var callerId = (User.GetEntraObjectId() ?? "");
+        var email = User.GetEmail();
         await audit.LogAsync("Assignment", id.ToString(), "Overridden", callerId, email, null,
             $"Driver changed to {newDriver.FullName}. {dto.Notes}");
 

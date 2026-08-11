@@ -40,8 +40,8 @@ public class DriversController(AppDbContext db, IAuditService audit) : Controlle
         db.Users.Add(driver);
         await db.SaveChangesAsync();
 
-        var callerEmail = User.FindFirstValue("preferred_username") ?? "";
-        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var callerEmail = User.GetEmail();
+        var callerId = User.GetEntraObjectId();
         await audit.LogAsync("Driver", driver.Id.ToString(), "Registered", callerId ?? "", callerEmail, null,
             $"Driver pre-registered: {driver.FullName} ({driver.Email})");
 
@@ -77,16 +77,21 @@ public class DriversController(AppDbContext db, IAuditService audit) : Controlle
         var driver = await db.Users.FindAsync(id);
         if (driver is null || driver.Role != "Driver") return NotFound();
 
-        var callerId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToHashSet();
-        if (!roles.Overlaps(new[] { "Coordinator", "Manager", "Admin" }) && driver.EntraObjectId != callerId)
-            return Forbid();
+        // Drivers may set their own status; operations staff may set anyone's.
+        // Claims are read tolerantly — a single-spelling lookup here previously
+        // meant roles came back empty and legitimate users were blocked.
+        var callerId = User.GetEntraObjectId();
+        if (!User.IsOperationsStaff() && driver.EntraObjectId != callerId)
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "You can only change your own driver status."
+            });
 
         driver.DriverStatus = dto.Status;
         driver.LastStatusChange = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        var email = User.FindFirstValue("preferred_username") ?? "";
+        var email = User.GetEmail();
         await audit.LogAsync("Driver", id.ToString(), "StatusChanged", callerId ?? "", email, null,
             $"Status → {dto.Status}");
 
