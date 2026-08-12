@@ -33,6 +33,8 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("Coordinator", p => p.RequireRole("Coordinator", "Manager", "Admin"))
     .AddPolicy("Manager",     p => p.RequireRole("Manager", "Admin"))
     .AddPolicy("Mechanic",    p => p.RequireRole("Mechanic", "Manager", "Admin"))
+    // HOD signs off material transport before it reaches GM Logistics.
+    .AddPolicy("HOD",         p => p.RequireRole("HOD", "Admin"))
     .AddPolicy("Admin",       p => p.RequireRole("Admin"));
 
 // ── CORS ──────────────────────────────────────────────────────────────────────

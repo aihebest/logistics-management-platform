@@ -2,7 +2,7 @@ import { useMsal } from '@azure/msal-react'
 import { useEffect, useState } from 'react'
 import { apiScopes, loginRequest } from './msalConfig'
 
-export type AppRole = 'Driver' | 'Coordinator' | 'Manager' | 'Mechanic' | 'Admin'
+export type AppRole = 'Driver' | 'Coordinator' | 'Manager' | 'Mechanic' | 'HOD' | 'Admin'
 
 /** Safely base64-decode a JWT payload segment to extract claims */
 function decodeJwtPayload(token: string): Record<string, unknown> {

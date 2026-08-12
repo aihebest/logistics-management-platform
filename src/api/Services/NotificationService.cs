@@ -19,6 +19,13 @@ public interface INotificationService
     // ── Assignment ──────────────────────────────────────────────────────────────
     Task SendAssignmentConfirmedAsync(Assignment assignment);
 
+    // ── Material transport approval chain ───────────────────────────────────────
+    Task SendMaterialAwaitingHodAsync(MaterialTransportRequest request);
+    Task SendMaterialAwaitingManagerAsync(MaterialTransportRequest request);
+    Task SendMaterialApprovedAsync(MaterialTransportRequest request);
+    Task SendMaterialRejectedAsync(MaterialTransportRequest request, string stage, string? reason);
+    Task SendMaterialDispatchedAsync(MaterialTransportRequest request);
+
     // ── Maintenance ─────────────────────────────────────────────────────────────
     Task SendMaintenanceDueAsync(MaintenanceRecord record, int daysUntilDue);
     Task SendMaintenanceOverdueAsync(MaintenanceRecord record);
@@ -422,6 +429,197 @@ public class NotificationService(
             await SendEmailAsync(email, subject, body);
 
         logger.LogInformation("Vehicle returned to service notification sent: {Vehicle}", vehicle.RegistrationNo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MATERIAL TRANSPORT APPROVAL CHAIN
+    // Requestor submits → HOD approves → GM Logistics approves → driver assigned.
+    // Each handoff emails the group that now has to act, so requests don't sit
+    // unnoticed in the queue.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Shared summary block used by every material transport email.</summary>
+    private static string MaterialDetails(MaterialTransportRequest r) => $"""
+        Form No:     {r.FormNumber}
+        Project:     {r.ProjectName}
+        Purpose:     {r.Purpose}
+        Loading:     {r.LoadingPoint}{(r.LoadingDate.HasValue ? $" on {r.LoadingDate:dd MMM yyyy}" : "")}
+        Delivery:    {r.DeliveryPoint}{(r.DeliveryDate.HasValue ? $" by {r.DeliveryDate:dd MMM yyyy}" : "")}
+        Items:       {r.Items.Count}
+        Requested By:{r.RequestedBy?.FullName ?? "Unknown"}
+        """;
+
+    public async Task SendMaterialAwaitingHodAsync(MaterialTransportRequest request)
+    {
+        var subject = $"Material Transport — HOD approval needed ({request.FormNumber})";
+        var body = $"""
+            A material transport request has been submitted and is awaiting your approval as HOD.
+
+            {MaterialDetails(request)}
+
+            Please log in to review and approve or reject this request. It cannot proceed
+            to GM Logistics until you action it.
+
+            {PlatformUrl()}
+            """;
+
+        await SendToRolesAsync(subject, body, "HOD", "Manager", "Admin");
+        await NotifyRolesInAppAsync("MaterialAwaitingHod", subject,
+            $"{request.FormNumber} — {request.ProjectName}: {request.Purpose}",
+            "MaterialTransportRequest", request.Id, "HOD", "Manager", "Admin");
+
+        logger.LogInformation("Material transport {FormNo} — HOD approval requested", request.FormNumber);
+    }
+
+    public async Task SendMaterialAwaitingManagerAsync(MaterialTransportRequest request)
+    {
+        var subject = $"Material Transport — GM Logistics approval needed ({request.FormNumber})";
+        var body = $"""
+            A material transport request has been approved by the HOD and now requires
+            GM Logistics approval.
+
+            {MaterialDetails(request)}
+            HOD Approved:{request.HodApprovedAt:dd MMM yyyy HH:mm}
+            HOD Remarks: {request.HodRemarks ?? "None"}
+
+            Once you approve, a driver and vehicle can be assigned.
+
+            {PlatformUrl()}
+            """;
+
+        await SendToRolesAsync(subject, body, "Manager", "Admin");
+        await NotifyRolesInAppAsync("MaterialAwaitingManager", subject,
+            $"{request.FormNumber} — HOD approved, awaiting GM Logistics",
+            "MaterialTransportRequest", request.Id, "Manager", "Admin");
+
+        logger.LogInformation("Material transport {FormNo} — GM Logistics approval requested", request.FormNumber);
+    }
+
+    public async Task SendMaterialApprovedAsync(MaterialTransportRequest request)
+    {
+        var subject = $"Material Transport approved — assign driver ({request.FormNumber})";
+        var body = $"""
+            A material transport request has completed both approval stages and is ready
+            for a driver and vehicle to be assigned.
+
+            {MaterialDetails(request)}
+
+            Please assign a driver and vehicle so the movement can be scheduled.
+
+            {PlatformUrl()}
+            """;
+
+        // Coordinators do the assigning; managers copied for visibility.
+        await SendToRolesAsync(subject, body, "Coordinator", "Manager", "Admin");
+        await NotifyRolesInAppAsync("MaterialApproved", subject,
+            $"{request.FormNumber} approved — needs driver & vehicle",
+            "MaterialTransportRequest", request.Id, "Coordinator", "Manager", "Admin");
+
+        // Tell the requester it cleared approval.
+        if (request.RequestedBy?.Email is { Length: > 0 } requesterEmail)
+        {
+            await SendEmailAsync(requesterEmail,
+                $"Your material transport request was approved ({request.FormNumber})",
+                $"""
+                Hi {request.RequestedBy.FullName},
+
+                Your material transport request has been approved by both the HOD and
+                GM Logistics. A driver and vehicle will be assigned shortly.
+
+                {MaterialDetails(request)}
+
+                {PlatformUrl()}
+                """);
+        }
+
+        logger.LogInformation("Material transport {FormNo} fully approved", request.FormNumber);
+    }
+
+    public async Task SendMaterialRejectedAsync(MaterialTransportRequest request, string stage, string? reason)
+    {
+        var subject = $"Material Transport request declined ({request.FormNumber})";
+        var body = $"""
+            Hi {request.RequestedBy?.FullName ?? "there"},
+
+            Your material transport request was not approved at the {stage} stage.
+
+            {MaterialDetails(request)}
+            Reason:      {reason ?? "No reason provided"}
+
+            Please contact the logistics team if you need to discuss or resubmit.
+
+            {PlatformUrl()}
+            """;
+
+        if (request.RequestedBy?.Email is { Length: > 0 } to)
+            await SendEmailAsync(to, subject, body);
+
+        if (request.RequestedBy != null)
+            await NotifyInAppAsync(request.RequestedBy.Id, "MaterialRejected", subject,
+                $"{request.FormNumber} declined at {stage}: {reason ?? "no reason given"}",
+                "MaterialTransportRequest", request.Id.ToString());
+
+        // Keep the logistics team copied so the queue stays visible.
+        await SendToRolesAsync(subject, body, "Coordinator", "Manager", "Admin");
+
+        logger.LogInformation("Material transport {FormNo} rejected at {Stage}", request.FormNumber, stage);
+    }
+
+    public async Task SendMaterialDispatchedAsync(MaterialTransportRequest request)
+    {
+        var driver  = request.AssignedDriver;
+        var vehicle = request.AssignedVehicle;
+        var subject = $"Material Transport assigned ({request.FormNumber})";
+        var body = $"""
+            A driver and vehicle have been assigned to a material transport request.
+
+            {MaterialDetails(request)}
+            Driver:      {driver?.FullName ?? "To be confirmed"}
+            Vehicle:     {vehicle?.RegistrationNo ?? "To be confirmed"}
+
+            {PlatformUrl()}
+            """;
+
+        if (driver != null)
+        {
+            await NotifyInAppAsync(driver.Id, "MaterialAssigned", subject,
+                $"{request.FormNumber}: {request.LoadingPoint} → {request.DeliveryPoint}",
+                "MaterialTransportRequest", request.Id.ToString());
+
+            if (!string.IsNullOrWhiteSpace(driver.Email))
+                await SendEmailAsync(driver.Email, subject, body);
+        }
+
+        if (request.RequestedBy?.Email is { Length: > 0 } requesterEmail)
+            await SendEmailAsync(requesterEmail, subject, body);
+
+        await SendToRolesAsync(subject, body, "Coordinator", "Manager", "Admin");
+
+        logger.LogInformation("Material transport {FormNo} dispatched", request.FormNumber);
+    }
+
+    /// <summary>Emails everyone holding any of the given roles, plus the configured escalation addresses.</summary>
+    private async Task SendToRolesAsync(string subject, string body, params string[] roles)
+    {
+        var dbRecipients = await GetEmailsForRolesAsync(roles);
+        var cfgRecipients = new[] { _managerEmail, _supervisorEmail }
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Select(e => e!);
+
+        foreach (var email in dbRecipients.Union(cfgRecipients, StringComparer.OrdinalIgnoreCase))
+            await SendEmailAsync(email, subject, body);
+    }
+
+    /// <summary>Raises an in-app notification for every active user in the given roles.</summary>
+    private async Task NotifyRolesInAppAsync(string type, string subject, string body,
+                                             string relatedType, Guid relatedId, params string[] roles)
+    {
+        var users = await db.Users
+            .Where(u => u.IsActive && roles.Contains(u.Role))
+            .ToListAsync();
+
+        foreach (var u in users)
+            await NotifyInAppAsync(u.Id, type, subject, body, relatedType, relatedId.ToString());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

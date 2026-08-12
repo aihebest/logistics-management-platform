@@ -14,6 +14,7 @@ namespace LogisticsApi.Controllers;
 public class MaterialTransportController(
     AppDbContext db,
     ICurrentUserService currentUser,
+    INotificationService notifications,
     ILogger<MaterialTransportController> logger) : ControllerBase
 {
     private Task<Models.Entities.User?> GetCallerAsync() =>
@@ -126,14 +127,28 @@ public class MaterialTransportController(
 
         logger.LogInformation("Material transport request {FormNo} created by {Email}", formNo, caller.Email);
 
+        // Alert the HODs that something is waiting on them. Wrapped so an email
+        // problem can never lose a submitted request.
+        try
+        {
+            var full = await LoadForNotificationAsync(request.Id);
+            if (full != null) await notifications.SendMaterialAwaitingHodAsync(full);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "HOD notification failed for {FormNo} — request was saved", formNo);
+        }
+
         // Return the saved record directly. (Previously used CreatedAtAction, whose
         // route generation is an avoidable extra failure mode on the success path.)
         return Ok(await GetFullDto(request.Id));
     }
 
     // ── HOD Approval ──────────────────────────────────────────────────────────
+    // Stage 1 of the chain. Restricted to the HOD role so this is a genuine
+    // separate approval from GM Logistics below; Admin retained as break-glass.
     [HttpPost("{id:guid}/hod-approval")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "HOD,Admin")]
     public async Task<IActionResult> HodApprove(Guid id, ApproveMaterialTransportDto dto)
     {
         var request = await db.MaterialTransportRequests.FindAsync(id);
@@ -144,23 +159,29 @@ public class MaterialTransportController(
         var caller = await GetCallerAsync();
         if (caller == null) return Unauthorized();
 
-        if (dto.Action == "Approve")
+        var approved = dto.Action == "Approve";
+        request.Status          = approved ? "PendingManager" : "Rejected";
+        request.HodApprovedById = caller.Id;
+        request.HodApprovedAt   = DateTime.UtcNow;
+        request.HodRemarks      = dto.Remarks;
+        request.UpdatedAt       = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        // Notification failures must never block the approval itself.
+        try
         {
-            request.Status = "PendingManager";
-            request.HodApprovedById = caller.Id;
-            request.HodApprovedAt = DateTime.UtcNow;
-            request.HodRemarks = dto.Remarks;
+            var full = await LoadForNotificationAsync(id);
+            if (full != null)
+            {
+                if (approved) await notifications.SendMaterialAwaitingManagerAsync(full);
+                else          await notifications.SendMaterialRejectedAsync(full, "HOD", dto.Remarks);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            request.Status = "Rejected";
-            request.HodApprovedById = caller.Id;
-            request.HodApprovedAt = DateTime.UtcNow;
-            request.HodRemarks = dto.Remarks;
+            logger.LogError(ex, "Notification failed after HOD decision on {Id} — decision was saved", id);
         }
 
-        request.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
         return NoContent();
     }
 
@@ -177,13 +198,29 @@ public class MaterialTransportController(
         var caller = await GetCallerAsync();
         if (caller == null) return Unauthorized();
 
-        request.Status = dto.Action == "Approve" ? "Approved" : "Rejected";
+        var approved = dto.Action == "Approve";
+        request.Status              = approved ? "Approved" : "Rejected";
         request.ManagerApprovedById = caller.Id;
-        request.ManagerApprovedAt = DateTime.UtcNow;
-        request.ManagerRemarks = dto.Remarks;
-        request.UpdatedAt = DateTime.UtcNow;
+        request.ManagerApprovedAt   = DateTime.UtcNow;
+        request.ManagerRemarks      = dto.Remarks;
+        request.UpdatedAt           = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
+
+        try
+        {
+            var full = await LoadForNotificationAsync(id);
+            if (full != null)
+            {
+                if (approved) await notifications.SendMaterialApprovedAsync(full);
+                else          await notifications.SendMaterialRejectedAsync(full, "GM Logistics", dto.Remarks);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Notification failed after GM Logistics decision on {Id} — decision was saved", id);
+        }
+
         return NoContent();
     }
 
@@ -214,8 +251,31 @@ public class MaterialTransportController(
         vehicle.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
+
+        try
+        {
+            var full = await LoadForNotificationAsync(id);
+            if (full != null) await notifications.SendMaterialDispatchedAsync(full);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Notification failed after assigning {Id} — assignment was saved", id);
+        }
+
         return NoContent();
     }
+
+    /// <summary>
+    /// Loads a request with the navigation properties the notification emails
+    /// need (requester, driver, vehicle, items). Returns null if it vanished.
+    /// </summary>
+    private Task<MaterialTransportRequest?> LoadForNotificationAsync(Guid id) =>
+        db.MaterialTransportRequests
+            .Include(x => x.RequestedBy)
+            .Include(x => x.AssignedDriver)
+            .Include(x => x.AssignedVehicle)
+            .Include(x => x.Items)
+            .FirstOrDefaultAsync(x => x.Id == id);
 
     private async Task<MaterialTransportRequestDto> GetFullDto(Guid id)
     {

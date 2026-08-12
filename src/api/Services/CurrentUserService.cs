@@ -138,6 +138,8 @@ public class CurrentUserService(AppDbContext db, ILogger<CurrentUserService> log
         var roles = principal.GetAppRoles();
         return roles.Contains("Admin")       ? "Admin"
              : roles.Contains("Manager")     ? "Manager"
+             // HOD approves material transport at stage 1, before GM Logistics.
+             : roles.Contains("HOD")         ? "HOD"
              : roles.Contains("Coordinator") ? "Coordinator"
              : roles.Contains("Mechanic")    ? "Mechanic"
              : roles.Contains("Driver")      ? "Driver"
