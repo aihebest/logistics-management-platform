@@ -35,7 +35,14 @@ public record DashboardSummaryDto(
     int PendingTripRequests,
     int ActiveAssignments,
     int OverdueMaintenanceCount,
-    int UpcomingMaintenanceCount
+    int UpcomingMaintenanceCount,
+    // ── Material movement ────────────────────────────────────────────────────
+    int MaterialAwaitingHod,        // submitted, waiting on HOD sign-off
+    int MaterialAwaitingManager,    // HOD approved, waiting on Manager
+    int MaterialApprovedUnassigned, // approved but no driver/vehicle yet
+    int MaterialDispatched,         // driver & vehicle assigned, on the road
+    int ProjectMaterialsInTransit,  // project consignments en route
+    int ProjectMaterialsOverdue     // past ETA and not yet delivered
 );
 
 public record SasTokenDto(string Url, string BlobName, DateTimeOffset ExpiresAt);

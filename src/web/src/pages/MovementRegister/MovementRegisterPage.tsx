@@ -146,7 +146,7 @@ export default function MovementRegisterPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['Type', 'Vehicle', 'Driver', 'Purpose', 'From', 'To', 'Time Out', 'Mileage Out', 'Time In', 'Mileage In', 'Status', 'Actions'].map(h => (
+                {['Type', 'Vehicle', 'Driver', 'Purpose', 'From', 'To', 'Time Out', 'Mileage Out', 'Time In', 'Mileage In', 'Distance', 'Status', 'Actions'].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -175,6 +175,10 @@ export default function MovementRegisterPage() {
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-500">
                     {m.mileageIn != null ? `${m.mileageIn.toLocaleString()} km` : '—'}
+                  </td>
+                  {/* Auto-calculated: Mileage In − Mileage Out */}
+                  <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-900 tabular-nums">
+                    {m.distanceKm != null ? `${m.distanceKm.toLocaleString()} km` : '—'}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${m.status === 'Open' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
@@ -207,7 +211,7 @@ export default function MovementRegisterPage() {
                 </tr>
               ))}
               {movements.length === 0 && (
-                <tr><td colSpan={12} className="px-4 py-12 text-center text-gray-400">No movement records found</td></tr>
+                <tr><td colSpan={13} className="px-4 py-12 text-center text-gray-400">No movement records found</td></tr>
               )}
             </tbody>
           </table>

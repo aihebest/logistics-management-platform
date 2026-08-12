@@ -18,6 +18,7 @@ import DriverSchedulePage from './pages/DriverSchedule/DriverSchedulePage'
 // Phase 3 (Travel & Accommodation reserved for future separate module)
 import ProjectMaterialsPage from './pages/ProjectMaterials/ProjectMaterialsPage'
 import MovementRegisterPage from './pages/MovementRegister/MovementRegisterPage'
+import MovementSummaryPage from './pages/MovementRegister/MovementSummaryPage'
 
 export default function App() {
   return (
@@ -46,6 +47,7 @@ export default function App() {
               {/* Phase 3 (Travel reserved for future) */}
               <Route path="/project-materials" element={<ProjectMaterialsPage />} />
               <Route path="/movement-register" element={<MovementRegisterPage />} />
+              <Route path="/movement-summary" element={<MovementSummaryPage />} />
             </Routes>
           </AppShell>
         </BrowserRouter>

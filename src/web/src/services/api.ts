@@ -236,6 +236,49 @@ export interface DashboardSummary {
   activeAssignments: number
   overdueMaintenanceCount: number
   upcomingMaintenanceCount: number
+  // Material movement
+  materialAwaitingHod: number
+  materialAwaitingManager: number
+  materialApprovedUnassigned: number
+  materialDispatched: number
+  projectMaterialsInTransit: number
+  projectMaterialsOverdue: number
+}
+
+// ── Movement Register summary (vendor / accounts reconciliation) ──────────────
+
+export interface MovementSummaryLine {
+  movementDateTime: string
+  returnDateTime?: string
+  purpose: string
+  origin: string
+  destination: string
+  driverName?: string
+  relatedRefNo?: string
+  gatePassNo?: string
+  mileageOut?: number
+  mileageIn?: number
+  distanceKm?: number
+  status: string
+}
+
+export interface VehicleMovementSummary {
+  vehicleReg: string
+  tripCount: number
+  totalDistanceKm: number
+  openingOdometer?: number
+  closingOdometer?: number
+  openMovements: number
+  movements: MovementSummaryLine[]
+}
+
+export interface MovementRegisterSummary {
+  fromDate: string
+  toDate: string
+  vehicleCount: number
+  totalTrips: number
+  grandTotalDistanceKm: number
+  vehicles: VehicleMovementSummary[]
 }
 
 // ── Phase 2 Types ─────────────────────────────────────────────────────────────
@@ -378,6 +421,7 @@ export interface MovementRegister {
   returnDateTime?: string     // Time In
   mileageOut?: number
   mileageIn?: number
+  distanceKm?: number
   gatePassNo?: string
   status: string              // Open | Closed
   loggedByName: string
@@ -539,6 +583,9 @@ export const movementRegisterApi = {
   create: (data: object) => api.post<MovementRegister>('/movement-register', data).then(r => r.data),
   close: (id: string, returnDateTime: string, mileageIn?: number) =>
     api.patch(`/movement-register/${id}/close`, { returnDateTime, mileageIn }),
+  /** Vehicle-grouped summary with distance totals, for printing / reconciliation. */
+  getSummary: (params?: { from?: string; to?: string; vehicleReg?: string }) =>
+    api.get<MovementRegisterSummary>('/movement-register/summary', { params }).then(r => r.data),
 }
 
 export function downloadBlob(blob: Blob, filename: string) {

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { reportsApi, tripsApi, maintenanceApi, assignmentsApi, type DashboardSummary } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -88,6 +89,26 @@ export default function DashboardPage() {
         <KpiCard label="In Maintenance"      value={summary.vehiclesInMaintenance}    color="amber"  icon="🔧" />
         <KpiCard label="Overdue Maintenance" value={summary.overdueMaintenanceCount}  color="red"    icon="⚠️" />
         <KpiCard label="Due in 14 Days"      value={summary.upcomingMaintenanceCount} color="gray"   icon="📅" />
+      </div>
+
+      {/* ── Material movement ────────────────────────────────────────────────
+          Shows where material requests are sitting in the approval chain, so
+          nothing stalls unnoticed waiting on a signature. */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Material Movement</h2>
+          <Link to="/material-transport" className="text-xs text-brand-600 hover:underline">
+            View all →
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <KpiCard label="Awaiting HOD"       value={summary.materialAwaitingHod}        color="amber"  icon="📝" />
+          <KpiCard label="Awaiting Manager"   value={summary.materialAwaitingManager}    color="amber"  icon="🖊️" />
+          <KpiCard label="Approved (no truck)" value={summary.materialApprovedUnassigned} color="blue"   icon="📦" />
+          <KpiCard label="Dispatched"         value={summary.materialDispatched}         color="purple" icon="🚚" />
+          <KpiCard label="Project In Transit" value={summary.projectMaterialsInTransit}  color="teal"   icon="🛳️" />
+          <KpiCard label="Project Overdue"    value={summary.projectMaterialsOverdue}    color="red"    icon="⏰" />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

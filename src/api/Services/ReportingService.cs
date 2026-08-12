@@ -42,6 +42,26 @@ public class ReportingService(AppDbContext db) : IReportingService
                           && m.ScheduledDate >= today
                           && m.ScheduledDate <= todayPlus14);
 
+        // ── Material movement pipeline ────────────────────────────────────────
+        var materialStats = await db.MaterialTransportRequests
+            .GroupBy(m => m.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Status, x => x.Count);
+
+        // "Approved" means signed off but not yet given a driver/vehicle.
+        var approvedUnassigned = await db.MaterialTransportRequests
+            .CountAsync(m => m.Status == "Approved"
+                          && (m.AssignedDriverId == null || m.AssignedVehicleId == null));
+
+        var projectInTransit = await db.ProjectMaterialTrackings
+            .CountAsync(p => p.DeliveryStatus == "InTransit" || p.DeliveryStatus == "Customs");
+
+        // Past the expected arrival date and still not delivered.
+        var projectOverdue = await db.ProjectMaterialTrackings
+            .CountAsync(p => p.Eta != null
+                          && p.Eta < today
+                          && p.DeliveryStatus != "Delivered");
+
         return new DashboardSummaryDto(
             AvailableDrivers: driverStats.GetValueOrDefault("Available", 0),
             DriversOnAssignment: driverStats.GetValueOrDefault("OnAssignment", 0),
@@ -53,7 +73,13 @@ public class ReportingService(AppDbContext db) : IReportingService
             PendingTripRequests: pendingTrips,
             ActiveAssignments: activeAssignments,
             OverdueMaintenanceCount: overdueCount,
-            UpcomingMaintenanceCount: upcomingCount
+            UpcomingMaintenanceCount: upcomingCount,
+            MaterialAwaitingHod:        materialStats.GetValueOrDefault("PendingHOD", 0),
+            MaterialAwaitingManager:    materialStats.GetValueOrDefault("PendingManager", 0),
+            MaterialApprovedUnassigned: approvedUnassigned,
+            MaterialDispatched:         materialStats.GetValueOrDefault("Assigned", 0),
+            ProjectMaterialsInTransit:  projectInTransit,
+            ProjectMaterialsOverdue:    projectOverdue
         );
     }
 

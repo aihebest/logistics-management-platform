@@ -113,10 +113,50 @@ public record MovementRegisterDto(
     DateTime? ReturnDateTime,    // Time In
     int? MileageOut,       // Odometer at departure
     int? MileageIn,        // Odometer at return
+    int? DistanceKm,       // Calculated: MileageIn - MileageOut (null until closed)
     string? GatePassNo,
     string Status,         // Open | Closed
     string LoggedByName,
     DateTime CreatedAt
+);
+
+// ── Movement Register summary (for vendor / accounts reconciliation) ──────────
+
+/// <summary>One movement line within a vehicle's summary block.</summary>
+public record MovementSummaryLineDto(
+    DateTime MovementDateTime,
+    DateTime? ReturnDateTime,
+    string Purpose,
+    string Origin,
+    string Destination,
+    string? DriverName,
+    string? RelatedRefNo,
+    string? GatePassNo,
+    int? MileageOut,
+    int? MileageIn,
+    int? DistanceKm,
+    string Status
+);
+
+/// <summary>All movements for one vehicle in the period, with totals.</summary>
+public record VehicleMovementSummaryDto(
+    string VehicleReg,
+    int TripCount,
+    int TotalDistanceKm,
+    int? OpeningOdometer,   // lowest MileageOut in the period
+    int? ClosingOdometer,   // highest MileageIn in the period
+    int OpenMovements,      // still out / not closed
+    List<MovementSummaryLineDto> Movements
+);
+
+/// <summary>Full report: one block per vehicle plus grand totals.</summary>
+public record MovementRegisterSummaryDto(
+    DateOnly FromDate,
+    DateOnly ToDate,
+    int VehicleCount,
+    int TotalTrips,
+    int GrandTotalDistanceKm,
+    List<VehicleMovementSummaryDto> Vehicles
 );
 
 public record CreateMovementRegisterDto(
