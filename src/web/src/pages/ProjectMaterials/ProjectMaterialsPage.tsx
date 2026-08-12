@@ -64,6 +64,23 @@ export default function ProjectMaterialsPage() {
       freightForwarder: fd.get('freightForwarder') as string || undefined,
       readinessDate: fd.get('readinessDate') as string || undefined,
       modeOfTransport: fd.get('modeOfTransport') as string || undefined,
+      deliveryStatus: fd.get('deliveryStatus') as string || undefined,
+      // Shipping documents
+      formMNumber: fd.get('formMNumber') as string || undefined,
+      vesselName: fd.get('vesselName') as string || undefined,
+      paarNumber: fd.get('paarNumber') as string || undefined,
+      paarDate: fd.get('paarDate') as string || undefined,
+      blNumber: fd.get('blNumber') as string || undefined,
+      awbNumber: fd.get('awbNumber') as string || undefined,
+      etd: fd.get('etd') as string || undefined,
+      eta: fd.get('eta') as string || undefined,
+      // Delivery date chain (ISO audit)
+      expectedDeliveryDateProjectTeam: fd.get('expectedDeliveryDateProjectTeam') as string || undefined,
+      storeNotificationDate: fd.get('storeNotificationDate') as string || undefined,
+      expectedDeliveryDateStoreTeam: fd.get('expectedDeliveryDateStoreTeam') as string || undefined,
+      expectedDeliveryDateAgreed: fd.get('expectedDeliveryDateAgreed') as string || undefined,
+      actualDeliveryDate: fd.get('actualDeliveryDate') as string || undefined,
+      remarks: fd.get('remarks') as string || undefined,
     })
   }
 
@@ -152,6 +169,40 @@ export default function ProjectMaterialsPage() {
                 <option>Sea Freight</option><option>Air Freight</option><option>Road</option><option>Rail</option>
               </select>
             </div>
+            <div><label className="label">Status</label>
+              <select name="deliveryStatus" className="input" defaultValue="Pending">
+                {DELIVERY_STATUSES.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+
+            {/* ── Shipping documents (optional at entry) ────────────────────── */}
+            <div className="col-span-full pt-1">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Shipping Documents <span className="normal-case font-normal text-gray-400">— optional, can be added later</span>
+              </p>
+            </div>
+            <div><label className="label">Form M No</label><input name="formMNumber" className="input" /></div>
+            <div><label className="label">PAAR No</label><input name="paarNumber" className="input" placeholder="Pre-Arrival Assessment" /></div>
+            <div><label className="label">PAAR Date</label><input name="paarDate" type="date" className="input" /></div>
+            <div><label className="label">Vessel</label><input name="vesselName" className="input" /></div>
+            <div><label className="label">BL No <span className="text-gray-400">(sea)</span></label><input name="blNumber" className="input" placeholder="Bill of Lading" /></div>
+            <div><label className="label">AWB No <span className="text-gray-400">(air)</span></label><input name="awbNumber" className="input" placeholder="Air Waybill" /></div>
+            <div><label className="label">ETD</label><input name="etd" type="date" className="input" /></div>
+            <div><label className="label">ETA</label><input name="eta" type="date" className="input" /></div>
+
+            {/* ── Delivery date chain (ISO audit) ───────────────────────────── */}
+            <div className="col-span-full pt-1">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Delivery Dates <span className="normal-case font-normal text-gray-400">— optional, can be added later</span>
+              </p>
+            </div>
+            <div><label className="label">Expected — Project Team</label><input name="expectedDeliveryDateProjectTeam" type="date" className="input" /></div>
+            <div><label className="label">Store Team Notified</label><input name="storeNotificationDate" type="date" className="input" /></div>
+            <div><label className="label">Expected — Store Team</label><input name="expectedDeliveryDateStoreTeam" type="date" className="input" /></div>
+            <div><label className="label">Agreed — Logistics &amp; Supplier</label><input name="expectedDeliveryDateAgreed" type="date" className="input" /></div>
+            <div><label className="label">Actual Delivery</label><input name="actualDeliveryDate" type="date" className="input" /></div>
+            <div className="md:col-span-3"><label className="label">Remarks</label><input name="remarks" className="input" /></div>
+
             <div className="col-span-full flex gap-3">
               <button type="submit" className="btn-primary" disabled={createEntry.isPending}>Save</button>
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>

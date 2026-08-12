@@ -55,7 +55,23 @@ public class ProjectMaterialTrackingController(AppDbContext db) : ControllerBase
             FreightForwarder = dto.FreightForwarder,
             ReadinessDate = dto.ReadinessDate,
             ModeOfTransport = dto.ModeOfTransport,
-            DeliveryStatus = "Pending",
+            DeliveryStatus = string.IsNullOrWhiteSpace(dto.DeliveryStatus) ? "Pending" : dto.DeliveryStatus,
+            // Shipping / tracking detail — optional, for consignments already in flight
+            FormMNumber = dto.FormMNumber,
+            VesselName = dto.VesselName,
+            Etd = dto.Etd,
+            Eta = dto.Eta,
+            ActualDeliveryDate = dto.ActualDeliveryDate,
+            Remarks = dto.Remarks,
+            // ISO audit fields
+            ExpectedDeliveryDateProjectTeam = dto.ExpectedDeliveryDateProjectTeam,
+            StoreNotificationDate = dto.StoreNotificationDate,
+            ExpectedDeliveryDateStoreTeam = dto.ExpectedDeliveryDateStoreTeam,
+            ExpectedDeliveryDateAgreed = dto.ExpectedDeliveryDateAgreed,
+            PaarNumber = dto.PaarNumber,
+            PaarDate = dto.PaarDate,
+            BlNumber = dto.BlNumber,
+            AwbNumber = dto.AwbNumber,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };

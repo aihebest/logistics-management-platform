@@ -90,7 +90,25 @@ public record CreateProjectMaterialTrackingDto(
     string? Supplier,
     string? FreightForwarder,
     DateOnly? ReadinessDate,
-    string? ModeOfTransport
+    string? ModeOfTransport,
+    // ── ISO audit fields — optional at creation, completed as the shipment
+    //    progresses. Available here so a coordinator entering a consignment
+    //    that is already in flight can record everything in one go.
+    DateOnly? ExpectedDeliveryDateProjectTeam = null,
+    DateOnly? StoreNotificationDate = null,
+    DateOnly? ExpectedDeliveryDateStoreTeam = null,
+    DateOnly? ExpectedDeliveryDateAgreed = null,
+    string? PaarNumber = null,
+    DateOnly? PaarDate = null,
+    string? BlNumber = null,
+    string? AwbNumber = null,
+    string? FormMNumber = null,
+    string? VesselName = null,
+    DateOnly? Etd = null,
+    DateOnly? Eta = null,
+    DateOnly? ActualDeliveryDate = null,
+    string? DeliveryStatus = null,
+    string? Remarks = null
 );
 
 public record UpdateProjectMaterialTrackingDto(
