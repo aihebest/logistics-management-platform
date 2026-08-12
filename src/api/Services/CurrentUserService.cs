@@ -63,7 +63,7 @@ public class CurrentUserService(AppDbContext db, ILogger<CurrentUserService> log
                 email, string.Join(", ", principal.Claims.Select(c => c.Type)));
 
             var byEmail = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
-            if (byEmail != null) return byEmail;
+            if (byEmail != null) return await SyncRoleAsync(byEmail, principal);
 
             // Synthesise a stable id from the email so repeat logins map to the
             // same record; a later login carrying a real oid will relink it.
@@ -73,7 +73,7 @@ public class CurrentUserService(AppDbContext db, ILogger<CurrentUserService> log
         // 1. Exact OID match — the common case for returning users.
         var user = await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == oid);
         if (user != null)
-            return user;
+            return await SyncRoleAsync(user, principal);
 
         // 1b. Known email but a different/placeholder stored id — relink to the
         //     current token's id so future lookups hit the fast path above.
@@ -84,21 +84,12 @@ public class CurrentUserService(AppDbContext db, ILogger<CurrentUserService> log
             {
                 existingByEmail.EntraObjectId = oid;
                 await db.SaveChangesAsync();
-                return existingByEmail;
+                return await SyncRoleAsync(existingByEmail, principal);
             }
         }
 
-        // 2. Auto-create, deriving the platform role from the Entra ID app roles.
-        //    Role claims also vary by mapping config, so read both spellings.
-        var tokenRoles = principal.FindAll("roles").Select(c => c.Value)
-            .Concat(principal.FindAll(ClaimTypes.Role).Select(c => c.Value))
-            .Distinct()
-            .ToList();
-        var role = tokenRoles.Contains("Admin")       ? "Admin"
-                 : tokenRoles.Contains("Manager")     ? "Manager"
-                 : tokenRoles.Contains("Coordinator") ? "Coordinator"
-                 : tokenRoles.Contains("Mechanic")    ? "Mechanic"
-                 : "Driver";   // Fallback — Admin promotes manually
+        // 2. Auto-create with the role from the Entra ID app roles.
+        var role = RoleFromToken(principal);
 
         var fullName = principal.FindFirstValue("name")
                     ?? principal.FindFirstValue(ClaimTypes.Name)
@@ -111,7 +102,8 @@ public class CurrentUserService(AppDbContext db, ILogger<CurrentUserService> log
             FullName      = fullName,
             Email         = email,
             Role          = role,
-            DriverStatus  = "OffDuty",
+            // Only actual drivers carry a duty status.
+            DriverStatus  = role == "Driver" ? "OffDuty" : null,
             IsActive      = true,
             CreatedAt     = DateTime.UtcNow
         };
@@ -131,5 +123,47 @@ public class CurrentUserService(AppDbContext db, ILogger<CurrentUserService> log
             db.Entry(newUser).State = EntityState.Detached;
             return await db.Users.FirstOrDefaultAsync(u => u.EntraObjectId == oid);
         }
+    }
+
+    /// <summary>
+    /// Maps the caller's Entra ID app roles onto a platform role.
+    ///
+    /// Someone with no app role assigned is <c>Staff</c> — they can raise
+    /// requests (which needs no role) but must NOT land in the Drivers list.
+    /// Defaulting these users to "Driver" previously filled the fleet roster
+    /// with office staff.
+    /// </summary>
+    private static string RoleFromToken(ClaimsPrincipal principal)
+    {
+        var roles = principal.GetAppRoles();
+        return roles.Contains("Admin")       ? "Admin"
+             : roles.Contains("Manager")     ? "Manager"
+             : roles.Contains("Coordinator") ? "Coordinator"
+             : roles.Contains("Mechanic")    ? "Mechanic"
+             : roles.Contains("Driver")      ? "Driver"
+             : "Staff";
+    }
+
+    /// <summary>
+    /// Keeps the stored role in step with Entra on every sign-in.
+    ///
+    /// Role used to be written only at creation, so promoting someone in Entra
+    /// (e.g. to Manager) never reached the database and their permissions never
+    /// changed. Users with no app role are left alone, so a driver registered
+    /// manually by a coordinator isn't demoted to Staff on their next login.
+    /// </summary>
+    private async Task<User> SyncRoleAsync(User user, ClaimsPrincipal principal)
+    {
+        var roles = principal.GetAppRoles();
+        if (roles.Count == 0) return user;      // nothing authoritative to apply
+
+        var desired = RoleFromToken(principal);
+        if (desired == "Staff" || desired == user.Role) return user;
+
+        logger.LogInformation("Role sync for {Email}: {Old} → {New}", user.Email, user.Role, desired);
+        user.Role = desired;
+        if (desired == "Driver") user.DriverStatus ??= "OffDuty";
+        await db.SaveChangesAsync();
+        return user;
     }
 }
