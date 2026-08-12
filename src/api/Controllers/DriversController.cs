@@ -13,14 +13,45 @@ namespace LogisticsApi.Controllers;
 [Authorize]
 public class DriversController(AppDbContext db, IAuditService audit) : ControllerBase
 {
-    // ── Register a new driver (pre-registration before Entra account exists) ─────
+    // ── Register a driver ────────────────────────────────────────────────────
+    // Works whether or not the person has used the platform before. If they
+    // already have an account (e.g. they signed in and were provisioned as
+    // Staff), they are promoted to Driver rather than rejected — previously this
+    // returned a conflict, so anyone who had ever logged in could not be
+    // registered as a driver at all.
     [HttpPost]
     [Authorize(Roles = "Manager,Admin")]
     public async Task<ActionResult<UserDto>> Register(RegisterDriverDto dto)
     {
         var emailNorm = dto.Email?.ToLowerInvariant().Trim() ?? string.Empty;
-        if (!string.IsNullOrEmpty(emailNorm) && await db.Users.AnyAsync(u => u.Email == emailNorm))
-            return Conflict(new { error = "A user with this email already exists." });
+
+        if (!string.IsNullOrEmpty(emailNorm))
+        {
+            var existing = await db.Users.FirstOrDefaultAsync(u => u.Email == emailNorm);
+            if (existing != null)
+            {
+                if (existing.Role == "Driver" && existing.IsActive)
+                    return Conflict(new { error = $"{existing.FullName} is already registered as a driver." });
+
+                // Promote to Driver, keeping their account and history intact.
+                var previousRole = existing.Role;
+                existing.Role         = "Driver";
+                existing.DriverStatus = existing.DriverStatus ?? "OffDuty";
+                existing.IsActive     = true;
+                if (!string.IsNullOrWhiteSpace(dto.FullName))    existing.FullName      = dto.FullName;
+                if (!string.IsNullOrWhiteSpace(dto.PhoneNumber)) existing.PhoneNumber   = dto.PhoneNumber;
+                if (!string.IsNullOrWhiteSpace(dto.LicenceNo))   existing.LicenceNo     = dto.LicenceNo;
+                if (dto.LicenceExpiry.HasValue)                  existing.LicenceExpiry = dto.LicenceExpiry;
+
+                await db.SaveChangesAsync();
+
+                await audit.LogAsync("Driver", existing.Id.ToString(), "PromotedToDriver",
+                    User.GetEntraObjectId() ?? "", User.GetEmail(), null,
+                    $"{existing.FullName} ({existing.Email}) changed from {previousRole} to Driver");
+
+                return Ok(ToDto(existing));
+            }
+        }
 
         var driver = new Models.Entities.User
         {

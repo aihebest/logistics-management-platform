@@ -76,8 +76,10 @@ export default function DriversPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-gray-900">Register New Driver</h2>
             <p className="text-xs text-gray-400 max-w-sm text-right">
-              The driver will be pre-registered with status <strong>Off Duty</strong>.
-              When they sign in for the first time their account will be automatically linked.
+              Registered by a coordinator or manager. The driver starts as
+              <strong> Off Duty</strong> and does not need an email address or a
+              platform login — coordinators assign trips and record mileage on
+              their behalf.
             </p>
           </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-2 md:grid-cols-3 gap-4">

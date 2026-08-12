@@ -39,7 +39,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
             e.HasIndex(x => x.EntraObjectId).IsUnique();
-            e.HasIndex(x => x.Email).IsUnique();
+            // Unique per real email, but drivers are registered without one and
+            // are stored with an empty email. A plain unique index treats those
+            // as duplicates and allows only a single such record, so filter them
+            // out of the constraint.
+            e.HasIndex(x => x.Email)
+             .IsUnique()
+             .HasFilter("[Email] IS NOT NULL AND [Email] <> ''");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
         });
 

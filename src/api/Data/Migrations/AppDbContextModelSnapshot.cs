@@ -152,7 +152,7 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<string>("PhoneNumber").HasMaxLength(20).HasColumnType("nvarchar(20)");
                 b.Property<string>("Role").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)");
                 b.HasKey("Id");
-                b.HasIndex("Email").IsUnique();
+                b.HasIndex("Email").IsUnique().HasFilter("[Email] IS NOT NULL AND [Email] <> ''");
                 b.HasIndex("EntraObjectId").IsUnique();
                 b.ToTable("Users");
             });
