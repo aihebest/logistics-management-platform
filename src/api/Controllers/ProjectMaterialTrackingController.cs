@@ -83,6 +83,17 @@ public class ProjectMaterialTrackingController(AppDbContext db) : ControllerBase
         if (dto.ActualDeliveryDate.HasValue) entry.ActualDeliveryDate = dto.ActualDeliveryDate;
         if (dto.Remarks != null) entry.Remarks = dto.Remarks;
         if (dto.FreightForwarder != null) entry.FreightForwarder = dto.FreightForwarder;
+
+        // ── ISO audit fields ─────────────────────────────────────────────────
+        if (dto.ExpectedDeliveryDateProjectTeam.HasValue) entry.ExpectedDeliveryDateProjectTeam = dto.ExpectedDeliveryDateProjectTeam;
+        if (dto.StoreNotificationDate.HasValue)           entry.StoreNotificationDate           = dto.StoreNotificationDate;
+        if (dto.ExpectedDeliveryDateStoreTeam.HasValue)   entry.ExpectedDeliveryDateStoreTeam   = dto.ExpectedDeliveryDateStoreTeam;
+        if (dto.ExpectedDeliveryDateAgreed.HasValue)      entry.ExpectedDeliveryDateAgreed      = dto.ExpectedDeliveryDateAgreed;
+        if (dto.PaarNumber != null)                       entry.PaarNumber                      = dto.PaarNumber;
+        if (dto.PaarDate.HasValue)                        entry.PaarDate                        = dto.PaarDate;
+        if (dto.BlNumber != null)                         entry.BlNumber                        = dto.BlNumber;
+        if (dto.AwbNumber != null)                        entry.AwbNumber                       = dto.AwbNumber;
+
         entry.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
@@ -119,5 +130,9 @@ public class ProjectMaterialTrackingController(AppDbContext db) : ControllerBase
         m.ModeOfTransport, m.FormMNumber, m.BlAwbNumber, m.VesselName,
         m.Etd, m.Eta,
         m.DeliveryStatus, m.ActualDeliveryDate,
-        m.Remarks, m.UpdatedAt);
+        m.Remarks,
+        m.ExpectedDeliveryDateProjectTeam, m.StoreNotificationDate,
+        m.ExpectedDeliveryDateStoreTeam, m.ExpectedDeliveryDateAgreed,
+        m.PaarNumber, m.PaarDate, m.BlNumber, m.AwbNumber,
+        m.UpdatedAt);
 }

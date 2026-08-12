@@ -67,6 +67,15 @@ public record ProjectMaterialTrackingDto(
     string DeliveryStatus,
     DateOnly? ActualDeliveryDate,
     string? Remarks,
+    // ── ISO audit fields ────────────────────────────────────────────────────
+    DateOnly? ExpectedDeliveryDateProjectTeam,
+    DateOnly? StoreNotificationDate,
+    DateOnly? ExpectedDeliveryDateStoreTeam,
+    DateOnly? ExpectedDeliveryDateAgreed,
+    string? PaarNumber,
+    DateOnly? PaarDate,
+    string? BlNumber,
+    string? AwbNumber,
     DateTime UpdatedAt
 );
 
@@ -95,7 +104,16 @@ public record UpdateProjectMaterialTrackingDto(
     DateOnly? Eta,
     DateOnly? ActualDeliveryDate,
     string? Remarks,
-    string? FreightForwarder
+    string? FreightForwarder,
+    // ── ISO audit fields ────────────────────────────────────────────────────
+    DateOnly? ExpectedDeliveryDateProjectTeam = null,
+    DateOnly? StoreNotificationDate = null,
+    DateOnly? ExpectedDeliveryDateStoreTeam = null,
+    DateOnly? ExpectedDeliveryDateAgreed = null,
+    string? PaarNumber = null,
+    DateOnly? PaarDate = null,
+    string? BlNumber = null,
+    string? AwbNumber = null
 );
 
 // ── Movement Register ─────────────────────────────────────────────────────────

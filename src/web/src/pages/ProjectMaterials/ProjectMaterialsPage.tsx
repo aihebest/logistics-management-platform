@@ -84,6 +84,15 @@ export default function ProjectMaterialsPage() {
         actualDeliveryDate: fd.get('actualDeliveryDate') as string || undefined,
         remarks: fd.get('remarks') as string || undefined,
         freightForwarder: fd.get('freightForwarder') as string || undefined,
+        // ISO audit fields
+        expectedDeliveryDateProjectTeam: fd.get('expectedDeliveryDateProjectTeam') as string || undefined,
+        storeNotificationDate: fd.get('storeNotificationDate') as string || undefined,
+        expectedDeliveryDateStoreTeam: fd.get('expectedDeliveryDateStoreTeam') as string || undefined,
+        expectedDeliveryDateAgreed: fd.get('expectedDeliveryDateAgreed') as string || undefined,
+        paarNumber: fd.get('paarNumber') as string || undefined,
+        paarDate: fd.get('paarDate') as string || undefined,
+        blNumber: fd.get('blNumber') as string || undefined,
+        awbNumber: fd.get('awbNumber') as string || undefined,
       },
     })
   }
@@ -168,7 +177,10 @@ export default function ProjectMaterialsPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['PO No', 'Project', 'Description', 'Qty', 'Supplier', 'Mode', 'Form M', 'BL/AWB', 'ETD', 'ETA', 'Status', 'Delivery', ''].map(h => (
+                {['PO No', 'Project', 'Description', 'Qty', 'Supplier', 'Mode', 'Form M',
+                  'PAAR', 'BL No', 'AWB No', 'ETD', 'ETA',
+                  'Exp. (Project)', 'Store Notified', 'Exp. (Store)', 'Agreed', 'Actual Delivery',
+                  'Status', ''].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -177,7 +189,7 @@ export default function ProjectMaterialsPage() {
               {materials.map(m => (
                 editingId === m.id ? (
                   <tr key={m.id} className="bg-blue-50">
-                    <td colSpan={13} className="px-4 py-3">
+                    <td colSpan={19} className="px-4 py-3">
                       <form onSubmit={e => handleUpdate(e, m.id)} className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div>
                           <label className="label">Status</label>
@@ -187,14 +199,32 @@ export default function ProjectMaterialsPage() {
                         </div>
                         <div><label className="label">Freight Forwarder</label><input name="freightForwarder" className="input" defaultValue={m.freightForwarder ?? ''} /></div>
                         <div><label className="label">Form M No</label><input name="formMNumber" className="input" defaultValue={m.formMNumber ?? ''} /></div>
-                        <div><label className="label">BL/AWB No</label><input name="blAwbNumber" className="input" defaultValue={m.blAwbNumber ?? ''} /></div>
                         <div><label className="label">Vessel</label><input name="vesselName" className="input" defaultValue={m.vesselName ?? ''} /></div>
-                        <div><label className="label">ETD</label><input name="etd" type="date" className="input" defaultValue={m.etd ?? ''} /></div>
-                        <div><label className="label">ETA</label><input name="eta" type="date" className="input" defaultValue={m.eta ?? ''} /></div>
                         <div><label className="label">Pickup Auth Date</label><input name="pickupAuthDate" type="date" className="input" defaultValue={m.pickupAuthDate ?? ''} /></div>
                         <div><label className="label">Pickup Date</label><input name="pickupDate" type="date" className="input" defaultValue={m.pickupDate ?? ''} /></div>
+
+                        {/* ── Shipping documents (ISO audit) ─────────────────── */}
+                        <div className="col-span-full mt-1">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Shipping Documents</p>
+                        </div>
+                        <div><label className="label">PAAR No</label><input name="paarNumber" className="input" defaultValue={m.paarNumber ?? ''} placeholder="Pre-Arrival Assessment Report" /></div>
+                        <div><label className="label">PAAR Date</label><input name="paarDate" type="date" className="input" defaultValue={m.paarDate ?? ''} /></div>
+                        <div><label className="label">BL No <span className="text-gray-400">(sea)</span></label><input name="blNumber" className="input" defaultValue={m.blNumber ?? ''} placeholder="Bill of Lading" /></div>
+                        <div><label className="label">AWB No <span className="text-gray-400">(air)</span></label><input name="awbNumber" className="input" defaultValue={m.awbNumber ?? ''} placeholder="Air Waybill" /></div>
+                        <div><label className="label">ETD</label><input name="etd" type="date" className="input" defaultValue={m.etd ?? ''} /></div>
+                        <div><label className="label">ETA</label><input name="eta" type="date" className="input" defaultValue={m.eta ?? ''} /></div>
+
+                        {/* ── Delivery date chain (ISO audit) ────────────────── */}
+                        <div className="col-span-full mt-1">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Delivery Dates</p>
+                        </div>
+                        <div><label className="label">Expected — Project Team</label><input name="expectedDeliveryDateProjectTeam" type="date" className="input" defaultValue={m.expectedDeliveryDateProjectTeam ?? ''} /></div>
+                        <div><label className="label">Store Team Notified</label><input name="storeNotificationDate" type="date" className="input" defaultValue={m.storeNotificationDate ?? ''} /></div>
+                        <div><label className="label">Expected — Store Team</label><input name="expectedDeliveryDateStoreTeam" type="date" className="input" defaultValue={m.expectedDeliveryDateStoreTeam ?? ''} /></div>
+                        <div><label className="label">Agreed — Logistics &amp; Supplier</label><input name="expectedDeliveryDateAgreed" type="date" className="input" defaultValue={m.expectedDeliveryDateAgreed ?? ''} /></div>
                         <div><label className="label">Actual Delivery</label><input name="actualDeliveryDate" type="date" className="input" defaultValue={m.actualDeliveryDate ?? ''} /></div>
-                        <div className="md:col-span-2"><label className="label">Remarks</label><input name="remarks" className="input" defaultValue={m.remarks ?? ''} /></div>
+
+                        <div className="col-span-full"><label className="label">Remarks</label><input name="remarks" className="input" defaultValue={m.remarks ?? ''} /></div>
                         <div className="col-span-full flex gap-2">
                           <button type="submit" className="btn-primary text-xs" disabled={updateEntry.isPending}>Save Changes</button>
                           <button type="button" className="btn-secondary text-xs" onClick={() => setEditingId(null)}>Cancel</button>
@@ -211,15 +241,28 @@ export default function ProjectMaterialsPage() {
                     <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.supplier || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.modeOfTransport || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.formMNumber || '—'}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.blAwbNumber || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.paarNumber || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.blNumber || m.blAwbNumber || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.awbNumber || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.etd || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.eta || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.expectedDeliveryDateProjectTeam || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.storeNotificationDate || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.expectedDeliveryDateStoreTeam || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.expectedDeliveryDateAgreed || '—'}</td>
+                    {/* Late against the agreed date is flagged for the audit trail */}
+                    <td className={`px-3 py-2 whitespace-nowrap ${
+                      m.actualDeliveryDate && m.expectedDeliveryDateAgreed
+                        && m.actualDeliveryDate > m.expectedDeliveryDateAgreed
+                        ? 'text-red-600 font-medium' : 'text-gray-600'
+                    }`}>
+                      {m.actualDeliveryDate || '—'}
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColor[m.deliveryStatus] ?? 'bg-gray-100 text-gray-700'}`}>
                         {m.deliveryStatus}
                       </span>
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.actualDeliveryDate || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {hasRole('Coordinator', 'Manager', 'Admin') && (
                         <div className="flex gap-1">
@@ -233,7 +276,7 @@ export default function ProjectMaterialsPage() {
                 )
               ))}
               {materials.length === 0 && (
-                <tr><td colSpan={13} className="px-4 py-12 text-center text-gray-400">No entries for {year}</td></tr>
+                <tr><td colSpan={19} className="px-4 py-12 text-center text-gray-400">No entries for {year}</td></tr>
               )}
             </tbody>
           </table>

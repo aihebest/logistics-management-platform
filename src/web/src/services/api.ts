@@ -405,6 +405,15 @@ export interface ProjectMaterialTracking {
   deliveryStatus: string
   actualDeliveryDate?: string
   remarks?: string
+  // ISO audit fields
+  expectedDeliveryDateProjectTeam?: string
+  storeNotificationDate?: string
+  expectedDeliveryDateStoreTeam?: string
+  expectedDeliveryDateAgreed?: string
+  paarNumber?: string
+  paarDate?: string
+  blNumber?: string
+  awbNumber?: string
   updatedAt: string
 }
 
