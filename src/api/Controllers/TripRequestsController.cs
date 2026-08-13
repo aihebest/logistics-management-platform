@@ -140,6 +140,12 @@ public class TripRequestsController(
             });
         }
 
+        // Resolve the approver once — needed for the assignment's AssignedById,
+        // which is a required foreign key.
+        var approver = await currentUser.ResolveOrProvisionAsync(User);
+        if (approver == null)
+            return Unauthorized(new { error = "Cannot resolve user identity from token" });
+
         // If manual driver/vehicle supplied, create assignment now
         if (dto?.DriverId.HasValue == true && dto?.VehicleId.HasValue == true)
         {
@@ -155,9 +161,13 @@ public class TripRequestsController(
                 TripRequestId = trip.Id,
                 DriverId      = driver.Id,
                 VehicleId     = vehicle.Id,
-                Status        = "Active",
-                StartTime     = trip.RequestedDateTime,
-                CreatedAt     = DateTime.UtcNow
+                // Required FK — leaving this unset inserted Guid.Empty and the
+                // foreign key violation surfaced as "An unexpected error occurred".
+                AssignedById   = approver.Id,
+                AssignmentType = "Manual",
+                Status         = "Active",
+                StartTime      = trip.RequestedDateTime,
+                CreatedAt      = DateTime.UtcNow
             };
 
             driver.DriverStatus     = "OnAssignment";
@@ -179,8 +189,7 @@ public class TripRequestsController(
         else
         {
             // Auto-assignment
-            var caller = await currentUser.ResolveOrProvisionAsync(User);
-            await engine.AssignAsync(trip, caller?.Id ?? Guid.Empty);
+            await engine.AssignAsync(trip, approver.Id);
 
             // Reload to check if auto-assignment succeeded
             await db.Entry(trip).ReloadAsync();

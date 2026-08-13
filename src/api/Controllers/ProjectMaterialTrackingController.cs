@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using LogisticsApi.Data;
 using LogisticsApi.Models.DTOs;
 using LogisticsApi.Models.Entities;
+using LogisticsApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +11,9 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/project-materials")]
 [Authorize]
-public class ProjectMaterialTrackingController(AppDbContext db) : ControllerBase
+public class ProjectMaterialTrackingController(
+    AppDbContext db,
+    ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
     public async Task<IEnumerable<ProjectMaterialTrackingDto>> GetAll(
@@ -41,9 +43,17 @@ public class ProjectMaterialTrackingController(AppDbContext db) : ControllerBase
     [Authorize(Roles = "Coordinator,Manager,Admin")]
     public async Task<ActionResult<ProjectMaterialTrackingDto>> Create(CreateProjectMaterialTrackingDto dto)
     {
+        // CreatedById is a required foreign key. It was never populated, so every
+        // insert wrote Guid.Empty and failed the constraint — which is why this
+        // register could never accept an entry.
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
+        if (caller == null)
+            return Unauthorized(new { error = "Cannot resolve user identity from token" });
+
         var entry = new ProjectMaterialTracking
         {
             Id = Guid.NewGuid(),
+            CreatedById = caller.Id,
             TrackingYear = dto.TrackingYear,
             PoNumber = dto.PoNumber,
             PoLineItem = dto.PoLineItem,
