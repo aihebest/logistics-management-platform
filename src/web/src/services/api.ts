@@ -478,6 +478,12 @@ export const tripsApi = {
   get: (id: string) => api.get<TripRequest>(`/trips/${id}`).then(r => r.data),
   create: (data: object) => api.post<TripRequest>('/trips', data).then(r => r.data),
   cancel: (id: string) => api.patch(`/trips/${id}/cancel`),
+  /** Approve a pending request. Omit driver/vehicle to let the engine auto-assign. */
+  approve: (id: string, data?: { driverId?: string; vehicleId?: string }) =>
+    api.patch<TripRequest>(`/trips/${id}/approve`, data ?? {}).then(r => r.data),
+  reject: (id: string, reason?: string) =>
+    api.patch(`/trips/${id}/reject`, { reason }),
+  complete: (id: string) => api.patch(`/trips/${id}/complete`),
 }
 
 export const assignmentsApi = {

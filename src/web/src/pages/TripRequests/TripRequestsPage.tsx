@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { tripsApi, apiErrorMessage } from '../../services/api'
+import { tripsApi, driversApi, vehiclesApi, apiErrorMessage } from '../../services/api'
+import { useAuth } from '../../auth/useAuth'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import toast from 'react-hot-toast'
@@ -37,8 +38,27 @@ function localDateIn(hours: number) {
 
 export default function TripRequestsPage() {
   const qc = useQueryClient()
+  const { hasRole } = useAuth()
   const [statusFilter, setStatusFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
+  // Request currently open in the approve panel (choose driver/vehicle or auto-assign)
+  const [approvingId, setApprovingId] = useState<string | null>(null)
+
+  const canApprove = hasRole('Coordinator', 'Manager', 'Admin')
+
+  // Only loaded for approvers — drivers/vehicles endpoints are role-restricted.
+  const { data: drivers = [] } = useQuery({
+    queryKey: ['drivers'],
+    queryFn: () => driversApi.getAll(),
+    enabled: canApprove,
+  })
+  const { data: vehicles = [] } = useQuery({
+    queryKey: ['vehicles', 'Available'],
+    queryFn: () => vehiclesApi.getAll('Available'),
+    enabled: canApprove,
+  })
+
+  const availableDrivers = drivers.filter(d => d.driverStatus === 'Available')
 
   // Requests must be at least 24h out (unless Urgent), so default the form to
   // ~25h ahead and stop the date picker offering anything earlier.
@@ -62,6 +82,53 @@ export default function TripRequestsPage() {
     // of a generic failure message the user can't act on.
     onError: err => toast.error(apiErrorMessage(err, 'Failed to create trip request'), { duration: 6000 }),
   })
+
+  const refreshAll = () => {
+    qc.invalidateQueries({ queryKey: ['trips'] })
+    qc.invalidateQueries({ queryKey: ['dashboard'] })
+    qc.invalidateQueries({ queryKey: ['assignments'] })
+    qc.invalidateQueries({ queryKey: ['drivers'] })
+    qc.invalidateQueries({ queryKey: ['vehicles'] })
+  }
+
+  const approveTrip = useMutation({
+    mutationFn: ({ id, driverId, vehicleId }: { id: string; driverId?: string; vehicleId?: string }) =>
+      tripsApi.approve(id, { driverId, vehicleId }),
+    onSuccess: () => {
+      refreshAll()
+      setApprovingId(null)
+      toast.success('Request approved')
+    },
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to approve request'), { duration: 7000 }),
+  })
+
+  const rejectTrip = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => tripsApi.reject(id, reason),
+    onSuccess: () => {
+      refreshAll()
+      toast.success('Request rejected — requester notified')
+    },
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to reject request'), { duration: 6000 }),
+  })
+
+  const handleApprove = (e: React.FormEvent<HTMLFormElement>, id: string) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    const driverId = (fd.get('driverId') as string) || undefined
+    const vehicleId = (fd.get('vehicleId') as string) || undefined
+    // Both or neither — a half-filled pair falls back to auto-assignment.
+    approveTrip.mutate({
+      id,
+      driverId: driverId && vehicleId ? driverId : undefined,
+      vehicleId: driverId && vehicleId ? vehicleId : undefined,
+    })
+  }
+
+  const handleReject = (id: string) => {
+    const reason = window.prompt('Reason for rejecting this request?')
+    if (reason === null) return          // cancelled
+    rejectTrip.mutate({ id, reason: reason.trim() || 'No reason provided' })
+  }
 
   const cancelTrip = useMutation({
     mutationFn: tripsApi.cancel,
@@ -201,16 +268,85 @@ export default function TripRequestsPage() {
                   </p>
                 )}
               </div>
-              {(t.status === 'Pending' || t.status === 'Approved' || t.status === 'Active') && (
-                <button
-                  className="btn-secondary text-xs"
-                  onClick={() => cancelTrip.mutate(t.id)}
-                  disabled={cancelTrip.isPending}
-                >
-                  Cancel
-                </button>
-              )}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Approvers act on anything still awaiting a decision */}
+                {canApprove && t.status === 'Pending' && (
+                  <>
+                    <button
+                      className="btn-primary text-xs"
+                      onClick={() => setApprovingId(approvingId === t.id ? null : t.id)}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="btn-secondary text-xs text-red-600"
+                      onClick={() => handleReject(t.id)}
+                      disabled={rejectTrip.isPending}
+                    >
+                      Reject
+                    </button>
+                  </>
+                )}
+                {(t.status === 'Pending' || t.status === 'Approved' || t.status === 'Active') && (
+                  <button
+                    className="btn-secondary text-xs"
+                    onClick={() => cancelTrip.mutate(t.id)}
+                    disabled={cancelTrip.isPending}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* ── Approve panel: pick a driver & vehicle, or let the system choose ── */}
+            {approvingId === t.id && (
+              <form
+                onSubmit={e => handleApprove(e, t.id)}
+                className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-3"
+              >
+                <div>
+                  <label className="label">Driver</label>
+                  <select name="driverId" className="input" defaultValue="">
+                    <option value="">Auto-assign (best available)</option>
+                    {availableDrivers.map(d => (
+                      <option key={d.id} value={d.id}>{d.fullName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Vehicle</label>
+                  <select name="vehicleId" className="input" defaultValue="">
+                    <option value="">Auto-assign (best available)</option>
+                    {vehicles.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.registrationNo} — {v.make} {v.model}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end gap-2">
+                  <button type="submit" className="btn-primary text-sm" disabled={approveTrip.isPending}>
+                    {approveTrip.isPending ? 'Approving…' : 'Confirm Approval'}
+                  </button>
+                  <button type="button" className="btn-secondary text-sm" onClick={() => setApprovingId(null)}>
+                    Cancel
+                  </button>
+                </div>
+                <p className="md:col-span-3 text-xs text-gray-500 -mt-1">
+                  Leave both as auto-assign and the system picks the least-loaded available
+                  driver and vehicle. {t.movementType !== 'IntraState' && (
+                    <span className="text-amber-600 font-medium">
+                      {t.movementType} movements require Manager or Admin approval.
+                    </span>
+                  )}
+                  {availableDrivers.length === 0 && (
+                    <span className="text-amber-600 font-medium"> No drivers are currently Available —
+                      the request will be approved but stay unassigned.</span>
+                  )}
+                </p>
+              </form>
+            )}
           </div>
         ))}
         {trips.length === 0 && (
