@@ -138,7 +138,9 @@ public record UpdateProjectMaterialTrackingDto(
 
 public record MovementRegisterDto(
     Guid Id,
-    string MovementType,   // VehicleOut | VehicleIn | MaterialOut | MaterialIn | GatePass | StaffMovement
+    string MovementType,   // VehicleOut | VehicleIn | MaterialOut | MaterialIn | GatePass | StaffMovement | Other
+    string? MovementTypeOther,   // detail when MovementType is "Other"
+    string? Passengers,          // names of people carried
     string? VehicleReg,
     string? DriverName,
     string? RelatedRefNo,
@@ -163,6 +165,7 @@ public record MovementSummaryLineDto(
     DateTime MovementDateTime,
     DateTime? ReturnDateTime,
     string Purpose,
+    string? Passengers,
     string Origin,
     string Destination,
     string? DriverName,
@@ -207,7 +210,9 @@ public record CreateMovementRegisterDto(
     int? MileageOut = null,
     int? MileageIn = null,
     DateTime? ReturnDateTime = null,
-    string? GatePassNo = null
+    string? GatePassNo = null,
+    string? MovementTypeOther = null,   // detail when MovementType is "Other"
+    string? Passengers = null           // names of people carried
 );
 
 public record CloseMovementDto(

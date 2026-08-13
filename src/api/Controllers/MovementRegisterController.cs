@@ -84,7 +84,7 @@ public class MovementRegisterController(AppDbContext db, ICurrentUserService cur
                         : null;
 
                     return new MovementSummaryLineDto(
-                        r.MovementDateTime, r.ReturnDateTime, r.Purpose,
+                        r.MovementDateTime, r.ReturnDateTime, r.Purpose, r.Passengers,
                         r.Origin ?? "", r.Destination ?? "",
                         r.Driver?.FullName, r.RelatedRefNo, r.GatePassNo,
                         r.MileageOut, r.MileageIn, dist, r.Status);
@@ -134,6 +134,11 @@ public class MovementRegisterController(AppDbContext db, ICurrentUserService cur
         {
             Id = Guid.NewGuid(),
             MovementType = dto.MovementType,
+            // Only meaningful when the type is "Other" — ignore stale text otherwise.
+            MovementTypeOther = dto.MovementType == "Other"
+                ? (string.IsNullOrWhiteSpace(dto.MovementTypeOther) ? null : dto.MovementTypeOther.Trim())
+                : null,
+            Passengers = string.IsNullOrWhiteSpace(dto.Passengers) ? null : dto.Passengers.Trim(),
             VehicleId = dto.VehicleId,
             DriverId = dto.DriverId,
             RelatedRefNo = dto.RelatedRefNo,
@@ -184,6 +189,8 @@ public class MovementRegisterController(AppDbContext db, ICurrentUserService cur
     private static MovementRegisterDto ToDto(MovementRegister r) => new(
         r.Id,
         r.MovementType,
+        r.MovementTypeOther,
+        r.Passengers,
         r.Vehicle?.RegistrationNo,
         r.Driver?.FullName,
         r.RelatedRefNo,

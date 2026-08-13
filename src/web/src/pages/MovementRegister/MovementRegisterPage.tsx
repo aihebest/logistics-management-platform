@@ -48,6 +48,9 @@ export default function MovementRegisterPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['movement-register'] }); setClosingId(null); toast.success('Movement closed') },
   })
 
+  // Drives the conditional "Specify Type" input when Other is selected.
+  const [movementType, setMovementType] = useState(MOVEMENT_TYPES[0].value)
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
@@ -58,9 +61,10 @@ export default function MovementRegisterPage() {
     const returnDtRaw = fd.get('returnDateTime') as string
     createMovement.mutate({
       movementType: fd.get('movementType') as string,
+      movementTypeOther: fd.get('movementTypeOther') as string || undefined,
+      passengers: fd.get('passengers') as string || undefined,
       vehicleId: vehicleId || undefined,
       driverId: driverId || undefined,
-      relatedRefNo: fd.get('relatedRefNo') as string || undefined,
       purpose: fd.get('purpose') as string,
       origin: fd.get('origin') as string,
       destination: fd.get('destination') as string,
@@ -104,10 +108,29 @@ export default function MovementRegisterPage() {
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="label">Movement Type</label>
-              <select name="movementType" className="input">
+              <select
+                name="movementType"
+                className="input"
+                value={movementType}
+                onChange={e => setMovementType(e.target.value)}
+              >
                 {MOVEMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
+            {/* Free-text detail — only shown when "Other" is chosen */}
+            {movementType === 'Other' ? (
+              <div>
+                <label className="label">Specify Type <span className="text-red-500">*</span></label>
+                <input
+                  name="movementTypeOther"
+                  className="input"
+                  required
+                  placeholder="e.g. Expatriate pick up, Courier run"
+                />
+              </div>
+            ) : (
+              <div className="hidden md:block" />
+            )}
             <div>
               <label className="label">Vehicle (if applicable)</label>
               <select name="vehicleId" className="input">
@@ -132,7 +155,14 @@ export default function MovementRegisterPage() {
             <div><label className="label">Time In <span className="text-gray-400 font-normal text-xs">(if already returned)</span></label><input name="returnDateTime" type="datetime-local" className="input" /></div>
             <div><label className="label">Mileage Out (km)</label><input name="mileageOut" type="number" className="input" placeholder="Odometer at departure" /></div>
             <div><label className="label">Mileage In (km)</label><input name="mileageIn" type="number" className="input" placeholder="Odometer at return" /></div>
-            <div><label className="label">Related Ref No</label><input name="relatedRefNo" className="input" placeholder="Trip / Form no" /></div>
+            <div className="md:col-span-3">
+              <label className="label">Passenger(s)</label>
+              <input
+                name="passengers"
+                className="input"
+                placeholder="Names of people carried — separate with commas"
+              />
+            </div>
             <div className="md:col-span-3 flex gap-3">
               <button type="submit" className="btn-primary" disabled={createMovement.isPending}>Log Movement</button>
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
@@ -146,7 +176,7 @@ export default function MovementRegisterPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['Type', 'Vehicle', 'Driver', 'Purpose', 'From', 'To', 'Time Out', 'Mileage Out', 'Time In', 'Mileage In', 'Distance', 'Status', 'Actions'].map(h => (
+                {['Type', 'Vehicle', 'Driver', 'Passenger(s)', 'Purpose', 'From', 'To', 'Time Out', 'Mileage Out', 'Time In', 'Mileage In', 'Distance', 'Status', 'Actions'].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -156,11 +186,15 @@ export default function MovementRegisterPage() {
                 <tr key={m.id} className={`hover:bg-gray-50 ${m.status === 'Open' ? 'bg-amber-50' : ''}`}>
                   <td className="px-3 py-2 whitespace-nowrap">
                     <span className="text-xs font-medium text-gray-700">
-                      {MOVEMENT_TYPES.find(t => t.value === m.movementType)?.label ?? m.movementType}
+                      {/* Show the typed detail for "Other", otherwise the standard label */}
+                      {m.movementType === 'Other' && m.movementTypeOther
+                        ? m.movementTypeOther
+                        : MOVEMENT_TYPES.find(t => t.value === m.movementType)?.label ?? m.movementType}
                     </span>
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-700 font-medium">{m.vehicleReg || '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.driverName || '—'}</td>
+                  <td className="px-3 py-2 max-w-[160px] truncate text-gray-600" title={m.passengers ?? ''}>{m.passengers || '—'}</td>
                   <td className="px-3 py-2 max-w-[180px] truncate text-gray-900" title={m.purpose}>{m.purpose}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.origin}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.destination}</td>
@@ -211,7 +245,7 @@ export default function MovementRegisterPage() {
                 </tr>
               ))}
               {movements.length === 0 && (
-                <tr><td colSpan={13} className="px-4 py-12 text-center text-gray-400">No movement records found</td></tr>
+                <tr><td colSpan={14} className="px-4 py-12 text-center text-gray-400">No movement records found</td></tr>
               )}
             </tbody>
           </table>

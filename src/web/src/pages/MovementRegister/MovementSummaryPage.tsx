@@ -15,7 +15,7 @@ import { format } from 'date-fns'
  */
 
 type ColumnKey =
-  | 'date' | 'timeOut' | 'timeIn' | 'purpose' | 'route' | 'driver'
+  | 'date' | 'timeOut' | 'timeIn' | 'purpose' | 'passengers' | 'route' | 'driver'
   | 'ref' | 'gatePass' | 'mileageOut' | 'mileageIn' | 'distance' | 'status'
 
 const COLUMNS: { key: ColumnKey; label: string; numeric?: boolean }[] = [
@@ -23,6 +23,7 @@ const COLUMNS: { key: ColumnKey; label: string; numeric?: boolean }[] = [
   { key: 'timeOut',    label: 'Time Out' },
   { key: 'timeIn',     label: 'Time In' },
   { key: 'purpose',    label: 'Purpose' },
+  { key: 'passengers', label: 'Passenger(s)' },
   { key: 'route',      label: 'Route' },
   { key: 'driver',     label: 'Driver' },
   { key: 'ref',        label: 'Ref No' },
@@ -70,6 +71,7 @@ export default function MovementSummaryPage() {
       case 'timeOut':    return format(new Date(m.movementDateTime), 'HH:mm')
       case 'timeIn':     return m.returnDateTime ? format(new Date(m.returnDateTime), 'HH:mm') : '—'
       case 'purpose':    return m.purpose
+      case 'passengers': return m.passengers ?? '—'
       case 'route':      return `${m.origin} → ${m.destination}`
       case 'driver':     return m.driverName ?? '—'
       case 'ref':        return m.relatedRefNo ?? '—'

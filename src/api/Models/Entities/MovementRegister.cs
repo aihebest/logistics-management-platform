@@ -3,7 +3,11 @@ namespace LogisticsApi.Models.Entities;
 public class MovementRegister
 {
     public Guid Id { get; set; }
-    public string MovementType { get; set; } = string.Empty;  // VehicleOut | VehicleIn | MaterialOut | MaterialIn | GatePass | StaffMovement
+    public string MovementType { get; set; } = string.Empty;  // VehicleOut | VehicleIn | MaterialOut | MaterialIn | GatePass | StaffMovement | Other
+    /// <summary>Free-text detail captured when MovementType is "Other".</summary>
+    public string? MovementTypeOther { get; set; }
+    /// <summary>Names of people carried on this movement.</summary>
+    public string? Passengers { get; set; }
     public Guid? VehicleId { get; set; }
     public Guid? DriverId { get; set; }
     public string? RelatedRefNo { get; set; }                 // Trip/Material request ref

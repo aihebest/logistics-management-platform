@@ -251,6 +251,7 @@ export interface MovementSummaryLine {
   movementDateTime: string
   returnDateTime?: string
   purpose: string
+  passengers?: string
   origin: string
   destination: string
   driverName?: string
@@ -419,7 +420,9 @@ export interface ProjectMaterialTracking {
 
 export interface MovementRegister {
   id: string
-  movementType: string        // VehicleOut | VehicleIn | MaterialOut | MaterialIn | GatePass | StaffMovement
+  movementType: string        // StaffTransfer | Delivery | Collection | SiteVisit | AirportTrip | OfficialErrand | Other
+  movementTypeOther?: string  // free-text detail when movementType is "Other"
+  passengers?: string         // names of people carried
   vehicleReg?: string
   driverName?: string
   relatedRefNo?: string
