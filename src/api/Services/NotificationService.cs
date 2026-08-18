@@ -84,23 +84,12 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        // Notify all active Coordinators and Managers by email.
-        // Also always include the configured ManagerEmail / SupervisorEmail so
-        // notifications reach the team even before users are assigned DB roles.
-        var dbRecipients  = await GetEmailsForRolesAsync("Coordinator", "Manager", "Admin");
-        var cfgRecipients = new[] { _managerEmail, _supervisorEmail }
-            .Where(e => !string.IsNullOrWhiteSpace(e))
-            .Select(e => e!);
-        var recipients = dbRecipients
-            .Union(cfgRecipients, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        foreach (var email in recipients)
-            await SendEmailAsync(email, subject, body);
+        // Coordinators and Managers action trip requests — send to them only.
+        await SendToRolesAsync(subject, body, "Coordinator", "Manager");
 
         // Also in-app notify Coordinators and Managers
         var users = await db.Users
-            .Where(u => u.IsActive && (u.Role == "Coordinator" || u.Role == "Manager" || u.Role == "Admin"))
+            .Where(u => u.IsActive && (u.Role == "Coordinator" || u.Role == "Manager"))
             .ToListAsync();
         foreach (var u in users)
             await NotifyInAppAsync(u.Id, "TripRequestSubmitted", subject,
@@ -212,7 +201,7 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager", "Admin");
+        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager");
         foreach (var email in recipients)
             await SendEmailAsync(email, subject, body);
     }
@@ -242,13 +231,13 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager", "Admin");
+        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager");
         foreach (var email in recipients)
             await SendEmailAsync(email, subject, body);
 
         // In-app alert to coordinators/managers too
         var users = await db.Users
-            .Where(u => u.IsActive && (u.Role == "Coordinator" || u.Role == "Manager" || u.Role == "Admin"))
+            .Where(u => u.IsActive && (u.Role == "Coordinator" || u.Role == "Manager"))
             .ToListAsync();
         foreach (var u in users)
             await NotifyInAppAsync(u.Id, "NoDriverAvailable", subject,
@@ -398,7 +387,7 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager", "Admin");
+        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager");
         foreach (var email in recipients)
             await SendEmailAsync(email, subject, body);
 
@@ -424,7 +413,7 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager", "Admin");
+        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager");
         foreach (var email in recipients)
             await SendEmailAsync(email, subject, body);
 
@@ -463,10 +452,10 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        await SendToRolesAsync(subject, body, "HOD", "Manager", "Admin");
+        await SendToRolesAsync(subject, body, "HOD");
         await NotifyRolesInAppAsync("MaterialAwaitingHod", subject,
             $"{request.FormNumber} — {request.ProjectName}: {request.Purpose}",
-            "MaterialTransportRequest", request.Id, "HOD", "Manager", "Admin");
+            "MaterialTransportRequest", request.Id, "HOD");
 
         logger.LogInformation("Material transport {FormNo} — HOD approval requested", request.FormNumber);
     }
@@ -487,10 +476,10 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        await SendToRolesAsync(subject, body, "Manager", "Admin");
+        await SendToRolesAsync(subject, body, "Manager");
         await NotifyRolesInAppAsync("MaterialAwaitingManager", subject,
             $"{request.FormNumber} — HOD approved, awaiting GM Logistics",
-            "MaterialTransportRequest", request.Id, "Manager", "Admin");
+            "MaterialTransportRequest", request.Id, "Manager");
 
         logger.LogInformation("Material transport {FormNo} — GM Logistics approval requested", request.FormNumber);
     }
@@ -510,10 +499,10 @@ public class NotificationService(
             """;
 
         // Coordinators do the assigning; managers copied for visibility.
-        await SendToRolesAsync(subject, body, "Coordinator", "Manager", "Admin");
+        await SendToRolesAsync(subject, body, "Coordinator");
         await NotifyRolesInAppAsync("MaterialApproved", subject,
             $"{request.FormNumber} approved — needs driver & vehicle",
-            "MaterialTransportRequest", request.Id, "Coordinator", "Manager", "Admin");
+            "MaterialTransportRequest", request.Id, "Coordinator");
 
         // Tell the requester it cleared approval.
         if (request.RequestedBy?.Email is { Length: > 0 } requesterEmail)
@@ -560,7 +549,7 @@ public class NotificationService(
                 "MaterialTransportRequest", request.Id.ToString());
 
         // Keep the logistics team copied so the queue stays visible.
-        await SendToRolesAsync(subject, body, "Coordinator", "Manager", "Admin");
+        await SendToRolesAsync(subject, body, "Coordinator");
 
         logger.LogInformation("Material transport {FormNo} rejected at {Stage}", request.FormNumber, stage);
     }
@@ -593,20 +582,38 @@ public class NotificationService(
         if (request.RequestedBy?.Email is { Length: > 0 } requesterEmail)
             await SendEmailAsync(requesterEmail, subject, body);
 
-        await SendToRolesAsync(subject, body, "Coordinator", "Manager", "Admin");
+        await SendToRolesAsync(subject, body, "Coordinator");
 
         logger.LogInformation("Material transport {FormNo} dispatched", request.FormNumber);
     }
 
-    /// <summary>Emails everyone holding any of the given roles, plus the configured escalation addresses.</summary>
+    /// <summary>
+    /// Emails the people who actually hold the given roles.
+    ///
+    /// The configured Logistics-Team address is a <em>fallback only</em>, used when
+    /// nobody holds the role yet — otherwise every notification went to the whole
+    /// distribution list and the entire team received messages meant for one
+    /// approver.
+    /// </summary>
     private async Task SendToRolesAsync(string subject, string body, params string[] roles)
     {
-        var dbRecipients = await GetEmailsForRolesAsync(roles);
-        var cfgRecipients = new[] { _managerEmail, _supervisorEmail }
-            .Where(e => !string.IsNullOrWhiteSpace(e))
-            .Select(e => e!);
+        var recipients = await GetEmailsForRolesAsync(roles);
 
-        foreach (var email in dbRecipients.Union(cfgRecipients, StringComparer.OrdinalIgnoreCase))
+        if (recipients.Count == 0)
+        {
+            recipients = new[] { _managerEmail, _supervisorEmail }
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(e => e!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (recipients.Count > 0)
+                logger.LogWarning(
+                    "No users hold role(s) {Roles} — falling back to the configured team address",
+                    string.Join("/", roles));
+        }
+
+        foreach (var email in recipients)
             await SendEmailAsync(email, subject, body);
     }
 
