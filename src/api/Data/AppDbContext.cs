@@ -100,6 +100,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            // Repair cost in NGN — pinned so large amounts aren't silently truncated.
+            e.Property(x => x.Cost).HasColumnType("decimal(14,2)");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
             e.Property(x => x.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
             e.HasOne(x => x.Vehicle)
@@ -113,9 +115,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
-            e.Property(x => x.LitresFilled).HasColumnType("decimal(8,4)");
+            e.Property(x => x.LitresFilled).HasColumnType("decimal(10,3)");
             e.Property(x => x.CostPerLitre).HasColumnType("decimal(10,4)");
-            e.Property(x => x.TotalCost).HasColumnType("decimal(12,2)");
+            e.Property(x => x.TotalCost).HasColumnType("decimal(14,2)");
+            // Gauge readings are percentages (0–100).
+            e.Property(x => x.FuelGaugeBefore).HasColumnType("decimal(5,2)");
+            e.Property(x => x.FuelGaugeAfter).HasColumnType("decimal(5,2)");
             e.HasOne(x => x.Vehicle)
              .WithMany(v => v.FuelLogs)
              .HasForeignKey(x => x.VehicleId)
@@ -168,6 +173,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            // Allows fractional quantities (e.g. metres, tonnes).
+            e.Property(x => x.Quantity).HasColumnType("decimal(12,3)");
             e.HasOne(x => x.Request)
              .WithMany(r => r.Items)
              .HasForeignKey(x => x.MaterialTransportRequestId)
@@ -214,6 +221,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.Quantity).HasColumnType("decimal(12,3)");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
             e.Property(x => x.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
             e.HasOne(x => x.CreatedBy).WithMany()

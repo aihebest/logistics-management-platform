@@ -64,16 +64,16 @@ namespace LogisticsApi.Data.Migrations
             modelBuilder.Entity("LogisticsApi.Models.Entities.FuelLog", b =>
             {
                 b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");
-                b.Property<decimal>("CostPerLitre").HasColumnType("decimal(8,4)");
+                b.Property<decimal>("CostPerLitre").HasColumnType("decimal(10,4)");
                 b.Property<DateTime>("CreatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
                 b.Property<DateOnly>("FuelDate").HasColumnType("date");
-                b.Property<decimal>("LitresFilled").HasColumnType("decimal(8,2)");
+                b.Property<decimal>("LitresFilled").HasColumnType("decimal(10,3)");
                 b.Property<Guid>("LoggedById").HasColumnType("uniqueidentifier");
                 b.Property<string>("Notes").HasMaxLength(500).HasColumnType("nvarchar(500)");
                 b.Property<int>("OdometerAtFill").HasColumnType("int");
                 b.Property<string>("ReceiptBlobUrl").HasMaxLength(500).HasColumnType("nvarchar(500)");
                 b.Property<string>("StationName").HasMaxLength(100).HasColumnType("nvarchar(100)");
-                b.Property<decimal>("TotalCost").HasColumnType("decimal(10,2)");
+                b.Property<decimal>("TotalCost").HasColumnType("decimal(14,2)");
                 b.Property<Guid>("VehicleId").HasColumnType("uniqueidentifier");
                 b.HasKey("Id");
                 b.HasIndex("LoggedById");
@@ -86,7 +86,7 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");
                 b.Property<string>("AttachmentBlobUrl").HasMaxLength(500).HasColumnType("nvarchar(500)");
                 b.Property<DateOnly?>("CompletedDate").HasColumnType("date");
-                b.Property<decimal?>("Cost").HasColumnType("decimal(10,2)");
+                b.Property<decimal?>("Cost").HasColumnType("decimal(14,2)");
                 b.Property<DateTime>("CreatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
                 b.Property<string>("Notes").HasMaxLength(1000).HasColumnType("nvarchar(1000)");
                 b.Property<DateOnly>("ScheduledDate").HasColumnType("date");
