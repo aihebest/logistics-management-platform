@@ -88,13 +88,13 @@ public class NotificationService(
         await SendToRolesAsync(subject, body, "Coordinator", "Manager");
 
         // Also in-app notify Coordinators and Managers
-        var users = await db.Users
+        var recipientIds = await db.Users
             .Where(u => u.IsActive && (u.Role == "Coordinator" || u.Role == "Manager"))
+            .Select(u => u.Id)
             .ToListAsync();
-        foreach (var u in users)
-            await NotifyInAppAsync(u.Id, "TripRequestSubmitted", subject,
-                $"New request from {requester?.FullName}: {trip.Purpose} — {trip.PickupLocation} → {trip.DestinationLocation}",
-                "TripRequest", trip.Id.ToString());
+        await NotifyManyInAppAsync(recipientIds, "TripRequestSubmitted", subject,
+            $"New request from {requester?.FullName}: {trip.Purpose} — {trip.PickupLocation} → {trip.DestinationLocation}",
+            "TripRequest", trip.Id.ToString());
 
         // Send confirmation to the requester
         if (requester?.Email is { Length: > 0 } requesterEmail)
@@ -202,8 +202,7 @@ public class NotificationService(
             """;
 
         var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager");
-        foreach (var email in recipients)
-            await SendEmailAsync(email, subject, body);
+        await SendEmailToManyAsync(recipients, subject, body);
     }
 
     /// <summary>
@@ -232,17 +231,16 @@ public class NotificationService(
             """;
 
         var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager");
-        foreach (var email in recipients)
-            await SendEmailAsync(email, subject, body);
+        await SendEmailToManyAsync(recipients, subject, body);
 
         // In-app alert to coordinators/managers too
-        var users = await db.Users
+        var alertIds = await db.Users
             .Where(u => u.IsActive && (u.Role == "Coordinator" || u.Role == "Manager"))
+            .Select(u => u.Id)
             .ToListAsync();
-        foreach (var u in users)
-            await NotifyInAppAsync(u.Id, "NoDriverAvailable", subject,
-                $"No capacity for: {trip.Purpose} — {trip.PickupLocation} → {trip.DestinationLocation}",
-                "TripRequest", trip.Id.ToString());
+        await NotifyManyInAppAsync(alertIds, "NoDriverAvailable", subject,
+            $"No capacity for: {trip.Purpose} — {trip.PickupLocation} → {trip.DestinationLocation}",
+            "TripRequest", trip.Id.ToString());
 
         logger.LogWarning("No driver available alert sent for trip {TripId}", trip.Id);
     }
@@ -388,8 +386,7 @@ public class NotificationService(
             """;
 
         var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager");
-        foreach (var email in recipients)
-            await SendEmailAsync(email, subject, body);
+        await SendEmailToManyAsync(recipients, subject, body);
 
         logger.LogInformation("Maintenance completed notification sent: {Vehicle}", vehicle.RegistrationNo);
     }
@@ -414,8 +411,7 @@ public class NotificationService(
             """;
 
         var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager");
-        foreach (var email in recipients)
-            await SendEmailAsync(email, subject, body);
+        await SendEmailToManyAsync(recipients, subject, body);
 
         logger.LogInformation("Vehicle returned to service notification sent: {Vehicle}", vehicle.RegistrationNo);
     }
@@ -613,20 +609,63 @@ public class NotificationService(
                     string.Join("/", roles));
         }
 
-        foreach (var email in recipients)
-            await SendEmailAsync(email, subject, body);
+        await SendEmailToManyAsync(recipients, subject, body);
     }
 
     /// <summary>Raises an in-app notification for every active user in the given roles.</summary>
     private async Task NotifyRolesInAppAsync(string type, string subject, string body,
                                              string relatedType, Guid relatedId, params string[] roles)
     {
-        var users = await db.Users
+        var recipientIds = await db.Users
             .Where(u => u.IsActive && roles.Contains(u.Role))
+            .Select(u => u.Id)
             .ToListAsync();
 
-        foreach (var u in users)
-            await NotifyInAppAsync(u.Id, type, subject, body, relatedType, relatedId.ToString());
+        await NotifyManyInAppAsync(recipientIds, type, subject, body, relatedType, relatedId.ToString());
+    }
+
+    /// <summary>
+    /// Inserts in-app notifications for several recipients in a single round-trip.
+    /// Saving once per person meant a separate database call for every member of
+    /// the team on each request.
+    /// </summary>
+    private async Task NotifyManyInAppAsync(IEnumerable<Guid> recipientIds, string type,
+                                            string subject, string body,
+                                            string? relatedEntityType = null, string? relatedEntityId = null)
+    {
+        var ids = recipientIds.Distinct().ToList();
+        if (ids.Count == 0) return;
+
+        try
+        {
+            db.ChangeTracker.AutoDetectChangesEnabled = false;
+            var now = DateTime.UtcNow;
+
+            db.Notifications.AddRange(ids.Select(id => new Notification
+            {
+                Id                = Guid.NewGuid(),
+                RecipientId       = id,
+                Channel           = "InApp",
+                Type              = type,
+                Subject           = subject,
+                Body              = body,
+                Status            = "Sent",
+                SentAt            = now,
+                RelatedEntityType = relatedEntityType,
+                RelatedEntityId   = relatedEntityId,
+                CreatedAt         = now
+            }));
+
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Bulk in-app notification failed for {Count} recipient(s) — continuing", ids.Count);
+        }
+        finally
+        {
+            db.ChangeTracker.AutoDetectChangesEnabled = true;
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -690,8 +729,7 @@ public class NotificationService(
             return;
         }
 
-        foreach (var email in all)
-            await SendEmailAsync(email, subject, body);
+        await SendEmailToManyAsync(all, subject, body);
     }
 
     private async Task<List<string>> GetEmailsForRolesAsync(params string[] roles)
@@ -732,6 +770,65 @@ public class NotificationService(
 
         // SMTP path (Office 365 / smtp.office365.com)
         await SendSmtpEmailAsync(to, subject, body);
+    }
+
+    /// <summary>
+    /// Sends one identical message to several recipients over a <em>single</em> SMTP
+    /// connection.
+    ///
+    /// Previously each recipient got its own SmtpClient, meaning a fresh TCP + TLS
+    /// + AUTH handshake to Office 365 per person. With a full logistics team that
+    /// added ten-plus seconds to every submit, because the request waited for all
+    /// of them in sequence.
+    /// </summary>
+    private async Task SendEmailToManyAsync(IEnumerable<string> recipients, string subject, string body)
+    {
+        var to = recipients
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Select(e => e.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (to.Count == 0) return;
+
+        // Azure Communication Services path handles its own batching.
+        if (emailClient != null)
+        {
+            foreach (var email in to) await SendEmailAsync(email, subject, body);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_smtpUser) || string.IsNullOrWhiteSpace(_smtpPass))
+        {
+            logger.LogWarning("SMTP credentials not configured — {Count} notification(s) not sent.", to.Count);
+            return;
+        }
+
+        try
+        {
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl      = _smtpSsl,
+                Credentials    = new NetworkCredential(_smtpUser, _smtpPass),
+                DeliveryMethod = SmtpDeliveryMethod.Network
+            };
+
+            using var msg = new MailMessage
+            {
+                From       = new MailAddress(_fromAddress, _fromName),
+                Subject    = subject,
+                Body       = body,
+                IsBodyHtml = false
+            };
+            foreach (var email in to) msg.To.Add(email);
+
+            await client.SendMailAsync(msg);
+            logger.LogDebug("SMTP email sent to {Count} recipient(s): {Subject}", to.Count, subject);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "SMTP batch email failed for {Count} recipient(s): {Subject}", to.Count, subject);
+        }
     }
 
     private async Task SendSmtpEmailAsync(string to, string subject, string body)
