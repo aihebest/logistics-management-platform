@@ -514,6 +514,8 @@ export const fuelApi = {
   getAll: (params?: { vehicleId?: string; from?: string; to?: string; productType?: string; locationId?: string }) =>
     api.get<FuelLog[]>('/fuel', { params }).then(r => r.data),
   create: (data: object) => api.post<FuelLog>('/fuel', data).then(r => r.data),
+  /** Correct an existing entry. Recorded in the audit trail. */
+  update: (id: string, data: object) => api.patch(`/fuel/${id}`, data),
 }
 
 export const reportsApi = {

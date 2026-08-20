@@ -98,3 +98,27 @@ public record CreateFuelLogDto(
     string? Notes = null,
     Guid? LocationId = null
 );
+
+/// <summary>
+/// Correction to an existing fuel log. Every field is optional — only supplied
+/// values are applied. Changes are written to the audit trail, since these
+/// figures reconcile against vendor invoices.
+/// </summary>
+public record UpdateFuelLogDto(
+    DateOnly? FuelDate = null,
+    string? ProductType = null,
+    decimal? LitresFilled = null,
+    decimal? CostPerLitre = null,
+    int? OdometerAtFill = null,
+    int? OdometerFrom = null,
+    int? OdometerTo = null,
+    decimal? FuelGaugeBefore = null,
+    decimal? FuelGaugeAfter = null,
+    bool? IsCashPayment = null,
+    string? CostCentre = null,
+    string? StationName = null,
+    string? Notes = null,
+    Guid? LocationId = null,
+    Guid? VehicleId = null,
+    string? CorrectionReason = null   // recorded in the audit trail
+);

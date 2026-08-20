@@ -10,8 +10,90 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/fuel")]
 [Authorize]
-public class FuelController(AppDbContext db, ICurrentUserService currentUser) : ControllerBase
+public class FuelController(
+    AppDbContext db,
+    ICurrentUserService currentUser,
+    IAuditService audit,
+    ILogger<FuelController> logger) : ControllerBase
 {
+    /// <summary>
+    /// Corrects an existing fuel log.
+    ///
+    /// Restricted to operations staff, and every change is written to the audit
+    /// trail with the old and new values. These figures reconcile against vendor
+    /// invoices and go to accounts, so a silent edit would be indefensible at
+    /// audit — the record must show who changed what, when and why.
+    ///
+    /// Total cost and mileage covered are recalculated rather than accepted from
+    /// the client, so they can never disagree with the values they derive from.
+    /// </summary>
+    [HttpPatch("{id:guid}")]
+    [Authorize(Roles = "Coordinator,Manager,Admin")]
+    public async Task<IActionResult> Update(Guid id, UpdateFuelLogDto dto)
+    {
+        var log = await db.FuelLogs.Include(f => f.Vehicle).FirstOrDefaultAsync(f => f.Id == id);
+        if (log == null) return NotFound();
+
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
+        if (caller == null) return Unauthorized(new { error = "Cannot resolve user identity from token" });
+
+        var changes = new List<string>();
+        void Track<T>(string field, T oldValue, T newValue)
+        {
+            if (!Equals(oldValue, newValue))
+                changes.Add($"{field}: {oldValue?.ToString() ?? "—"} → {newValue?.ToString() ?? "—"}");
+        }
+
+        if (dto.VehicleId.HasValue && dto.VehicleId.Value != log.VehicleId)
+        {
+            var vehicle = await db.Vehicles.FindAsync(dto.VehicleId.Value);
+            if (vehicle == null) return BadRequest(new { error = "Vehicle not found" });
+            Track("Vehicle", log.Vehicle?.RegistrationNo, vehicle.RegistrationNo);
+            log.VehicleId = dto.VehicleId.Value;
+        }
+
+        if (dto.FuelDate.HasValue)        { Track("Date", log.FuelDate, dto.FuelDate.Value);               log.FuelDate = dto.FuelDate.Value; }
+        if (dto.ProductType != null)      { Track("Product", log.ProductType, dto.ProductType);            log.ProductType = dto.ProductType; }
+        if (dto.LitresFilled.HasValue)    { Track("Litres", log.LitresFilled, dto.LitresFilled.Value);     log.LitresFilled = dto.LitresFilled.Value; }
+        if (dto.CostPerLitre.HasValue)    { Track("Rate", log.CostPerLitre, dto.CostPerLitre.Value);       log.CostPerLitre = dto.CostPerLitre.Value; }
+        if (dto.OdometerAtFill.HasValue)  { Track("Odometer", log.OdometerAtFill, dto.OdometerAtFill.Value); log.OdometerAtFill = dto.OdometerAtFill.Value; }
+        if (dto.OdometerFrom.HasValue)    { Track("Odometer From", log.OdometerFrom, dto.OdometerFrom);    log.OdometerFrom = dto.OdometerFrom; }
+        if (dto.OdometerTo.HasValue)      { Track("Odometer To", log.OdometerTo, dto.OdometerTo);          log.OdometerTo = dto.OdometerTo; }
+        if (dto.FuelGaugeBefore.HasValue) { Track("Gauge Before", log.FuelGaugeBefore, dto.FuelGaugeBefore); log.FuelGaugeBefore = dto.FuelGaugeBefore; }
+        if (dto.FuelGaugeAfter.HasValue)  { Track("Gauge After", log.FuelGaugeAfter, dto.FuelGaugeAfter);  log.FuelGaugeAfter = dto.FuelGaugeAfter; }
+        if (dto.IsCashPayment.HasValue)   { Track("Payment", log.IsCashPayment ? "Cash" : "Card/Transfer", dto.IsCashPayment.Value ? "Cash" : "Card/Transfer"); log.IsCashPayment = dto.IsCashPayment.Value; }
+        if (dto.CostCentre != null)       { Track("Cost Centre", log.CostCentre, dto.CostCentre);          log.CostCentre = dto.CostCentre; }
+        if (dto.StationName != null)      { Track("Station", log.StationName, dto.StationName);            log.StationName = dto.StationName; }
+        if (dto.Notes != null)            { Track("Notes", log.Notes, dto.Notes);                          log.Notes = dto.Notes; }
+        if (dto.LocationId.HasValue)      { Track("Location", log.LocationId, dto.LocationId);             log.LocationId = dto.LocationId; }
+
+        if (changes.Count == 0)
+            return Ok(new { message = "No changes were made." });
+
+        // Derived values — always recalculated so they cannot drift.
+        var recalculatedTotal = log.LitresFilled * log.CostPerLitre;
+        if (recalculatedTotal != log.TotalCost)
+        {
+            changes.Add($"Total: {log.TotalCost} → {recalculatedTotal}");
+            log.TotalCost = recalculatedTotal;
+        }
+
+        if (log.OdometerFrom.HasValue && log.OdometerTo.HasValue && log.OdometerTo >= log.OdometerFrom)
+            log.MileageCovered = log.OdometerTo - log.OdometerFrom;
+
+        await db.SaveChangesAsync();
+
+        var reason = string.IsNullOrWhiteSpace(dto.CorrectionReason) ? "No reason given" : dto.CorrectionReason.Trim();
+        await audit.LogAsync("FuelLog", id.ToString(), "Corrected",
+            User.GetEntraObjectId() ?? "", User.GetEmail(), null,
+            $"Reason: {reason}. Changes — {string.Join("; ", changes)}");
+
+        logger.LogInformation("Fuel log {Id} corrected by {Email}: {Changes}",
+            id, caller.Email, string.Join("; ", changes));
+
+        return Ok(new { message = "Fuel log updated.", changes });
+    }
+
     [HttpGet]
     public async Task<IEnumerable<FuelLogDto>> GetAll(
         [FromQuery] Guid? vehicleId,

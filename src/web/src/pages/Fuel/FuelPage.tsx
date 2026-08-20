@@ -1,13 +1,19 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fuelApi, vehiclesApi, locationsApi, apiErrorMessage } from '../../services/api'
+import { fuelApi, vehiclesApi, locationsApi, apiErrorMessage, type FuelLog } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
 
 const PRODUCT_TYPES = ['Petrol', 'Diesel']
 
 export default function FuelPage() {
   const qc = useQueryClient()
+  const { hasRole } = useAuth()
+  // Entry currently open for correction. Fuel figures reconcile against vendor
+  // invoices, so edits are restricted and written to the audit trail.
+  const [editing, setEditing] = useState<FuelLog | null>(null)
+  const canEdit = hasRole('Coordinator', 'Manager', 'Admin')
   const [showForm, setShowForm] = useState(false)
   const [productFilter, setProductFilter] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
@@ -39,6 +45,41 @@ export default function FuelPage() {
     },
     onError: err => toast.error(apiErrorMessage(err, 'Failed to save fuel log'), { duration: 6000 }),
   })
+
+  const correctLog = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) => fuelApi.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fuel'] })
+      setEditing(null)
+      toast.success('Correction saved and recorded in the audit trail')
+    },
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to save correction'), { duration: 6000 }),
+  })
+
+  /** Sends only the fields that were filled, so blanks never wipe existing data. */
+  const handleCorrect = (e: React.FormEvent<HTMLFormElement>, id: string) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    const str = (k: string) => { const v = (fd.get(k) as string | null)?.trim(); return v ? v : undefined }
+    const num = (k: string) => { const v = (fd.get(k) as string | null)?.trim(); return v ? Number(v) : undefined }
+    correctLog.mutate({
+      id,
+      data: {
+        fuelDate: str('fuelDate'),
+        productType: str('productType'),
+        litresFilled: num('litresFilled'),
+        costPerLitre: num('costPerLitre'),
+        odometerFrom: num('odometerFrom'),
+        odometerTo: num('odometerTo'),
+        stationName: str('stationName'),
+        costCentre: str('costCentre'),
+        isCashPayment: str('isCashPayment') === 'Cash' ? true
+                     : str('isCashPayment') === 'Card/Transfer' ? false : undefined,
+        notes: str('notes'),
+        correctionReason: str('correctionReason'),
+      },
+    })
+  }
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -184,12 +225,61 @@ export default function FuelPage() {
         </div>
       )}
 
+      {/* ── Correct a fuel entry ─────────────────────────────────────────── */}
+      {editing && (
+        <div className="card p-5 border-l-4 border-amber-500">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-base font-semibold text-gray-900">
+              Correct Entry — {editing.vehicleReg} · {editing.fuelDate}
+            </h2>
+            <button onClick={() => setEditing(null)} className="text-gray-400 hover:text-gray-600 text-sm">✕ Close</button>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            Change only what is wrong — leave a field blank to keep its current value.
+            The total recalculates from litres × rate. This correction is recorded in
+            the audit trail with your name.
+          </p>
+          <form onSubmit={e => handleCorrect(e, editing.id)} className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div><label className="label">Date</label><input name="fuelDate" type="date" className="input" defaultValue={editing.fuelDate} /></div>
+            <div>
+              <label className="label">Product</label>
+              <select name="productType" className="input" defaultValue={editing.productType}>
+                {PRODUCT_TYPES.map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+            <div><label className="label">Litres</label><input name="litresFilled" type="number" step="0.01" min="0" className="input" defaultValue={editing.litresFilled} /></div>
+            <div><label className="label">Rate (₦/litre)</label><input name="costPerLitre" type="number" step="0.01" min="0" className="input" defaultValue={editing.costPerLitre} /></div>
+            <div><label className="label">Odometer From</label><input name="odometerFrom" type="number" min="0" className="input" defaultValue={editing.odometerFrom ?? ''} /></div>
+            <div><label className="label">Odometer To</label><input name="odometerTo" type="number" min="0" className="input" defaultValue={editing.odometerTo ?? ''} /></div>
+            <div><label className="label">Station</label><input name="stationName" className="input" defaultValue={editing.stationName ?? ''} /></div>
+            <div>
+              <label className="label">Payment</label>
+              <select name="isCashPayment" className="input" defaultValue={editing.isCashPayment ? 'Cash' : 'Card/Transfer'}>
+                <option>Card/Transfer</option><option>Cash</option>
+              </select>
+            </div>
+            <div><label className="label">Cost Centre</label><input name="costCentre" className="input" defaultValue={editing.costCentre ?? ''} /></div>
+            <div className="md:col-span-3"><label className="label">Notes</label><input name="notes" className="input" defaultValue={editing.notes ?? ''} /></div>
+            <div className="col-span-full">
+              <label className="label">Reason for correction <span className="text-red-500">*</span></label>
+              <input name="correctionReason" className="input" required placeholder="e.g. Litres mistyped on original entry — corrected against receipt" />
+            </div>
+            <div className="col-span-full flex gap-3">
+              <button type="submit" className="btn-primary" disabled={correctLog.isPending}>
+                {correctLog.isPending ? 'Saving…' : 'Save Correction'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {['Date', 'Vehicle', 'Location', 'Product', 'Litres', 'Rate (₦)', 'Total (₦)', 'Mileage', 'Payment', 'Logged By'].map(h => (
+                {['Date', 'Vehicle', 'Location', 'Product', 'Litres', 'Rate (₦)', 'Total (₦)', 'Mileage', 'Payment', 'Logged By', ''].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                 ))}
               </tr>
@@ -219,10 +309,20 @@ export default function FuelPage() {
                     </span>
                   </td>
                   <td className="px-3 py-3 text-sm text-gray-500 whitespace-nowrap">{l.loggedByName}</td>
+                  <td className="px-3 py-3 text-sm whitespace-nowrap text-right">
+                    {canEdit && (
+                      <button
+                        onClick={() => setEditing(editing?.id === l.id ? null : l)}
+                        className="text-xs text-brand-600 hover:underline"
+                      >
+                        Correct
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
               {logs.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400">No fuel logs found</td></tr>
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-gray-400">No fuel logs found</td></tr>
               )}
             </tbody>
           </table>
