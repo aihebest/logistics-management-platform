@@ -460,6 +460,18 @@ export const driversApi = {
     api.get<DriverPerformance>(`/drivers/${id}/performance`).then(r => r.data),
 }
 
+/**
+ * Platform user administration — pre-register colleagues so notifications can
+ * reach them before their first sign-in.
+ */
+export const platformUsersApi = {
+  getAll: (params?: { role?: string; pendingOnly?: boolean }) =>
+    api.get<User[]>('/platform-users', { params }).then(r => r.data),
+  register: (data: { fullName: string; email: string; role: string; phoneNumber?: string }) =>
+    api.post<User>('/platform-users', data).then(r => r.data),
+  update: (id: string, data: object) => api.patch(`/platform-users/${id}`, data),
+}
+
 export const authApi = {
   /** Called once per login session to link/create the platform User record. */
   me: () => api.get<User>('/auth/me').then(r => r.data),

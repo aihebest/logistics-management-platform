@@ -19,6 +19,7 @@ import DriverSchedulePage from './pages/DriverSchedule/DriverSchedulePage'
 import ProjectMaterialsPage from './pages/ProjectMaterials/ProjectMaterialsPage'
 import MovementRegisterPage from './pages/MovementRegister/MovementRegisterPage'
 import MovementSummaryPage from './pages/MovementRegister/MovementSummaryPage'
+import PlatformUsersPage from './pages/Users/PlatformUsersPage'
 
 export default function App() {
   return (
@@ -48,6 +49,7 @@ export default function App() {
               <Route path="/project-materials" element={<ProjectMaterialsPage />} />
               <Route path="/movement-register" element={<MovementRegisterPage />} />
               <Route path="/movement-summary" element={<MovementSummaryPage />} />
+              <Route path="/platform-users" element={<PlatformUsersPage />} />
             </Routes>
           </AppShell>
         </BrowserRouter>

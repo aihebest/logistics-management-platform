@@ -13,6 +13,27 @@ public record UserDto(
     DateTime? LastStatusChange
 );
 
+/// <summary>
+/// Pre-registers a colleague so the platform can notify them before they have
+/// ever signed in. Their account links automatically on first login, matched by
+/// email address.
+/// </summary>
+public record RegisterPlatformUserDto(
+    string FullName,
+    string Email,
+    string Role,                 // HOD | Manager | Coordinator | Mechanic | Driver | Staff
+    string? PhoneNumber = null
+);
+
+/// <summary>Admin correction to an existing platform user.</summary>
+public record UpdatePlatformUserDto(
+    string? FullName = null,
+    string? Email = null,
+    string? Role = null,
+    string? PhoneNumber = null,
+    bool? IsActive = null
+);
+
 public record UpdateDriverStatusDto(string Status);
 
 public record CreateUserDto(
