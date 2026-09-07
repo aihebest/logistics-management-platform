@@ -135,6 +135,14 @@ export interface TripRequest {
   movementType: string
   departureDate?: string
   departureTime?: string
+  // Personnel & materials
+  personnelCount: number
+  personnelNames?: string
+  personnelCategory?: string   // Director | Manager | MidManagement | SeniorStaff | JuniorStaff
+  movementDuration?: string
+  isDropOff: boolean
+  hasMaterials: boolean
+  materialDescription?: string
 }
 
 export interface AssignmentSummary {
@@ -195,7 +203,8 @@ export interface FuelLog {
   litresFilled: number
   costPerLitre: number
   totalCost: number
-  isCashPayment: boolean
+  paymentMethod: string       // Card | Cash | Credit | Transfer
+  isCashPayment: boolean      // legacy mirror of paymentMethod === 'Cash'
   odometerAtFill: number
   odometerFrom?: number
   odometerTo?: number

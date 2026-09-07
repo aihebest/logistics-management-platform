@@ -16,7 +16,15 @@ public record TripRequestDto(
     // Phase 1 fields
     string MovementType,    // IntraState | Interstate | International
     DateOnly? DepartureDate,
-    TimeOnly? DepartureTime
+    TimeOnly? DepartureTime,
+    // ── Personnel & materials ───────────────────────────────────────────────
+    int PersonnelCount,
+    string? PersonnelNames,
+    string? PersonnelCategory,
+    string? MovementDuration,
+    bool IsDropOff,
+    bool HasMaterials,
+    string? MaterialDescription
 );
 
 public record AssignmentSummaryDto(
@@ -32,14 +40,23 @@ public record CreateTripRequestDto(
     string Purpose,
     string PickupLocation,
     string DestinationLocation,
-    DateTime RequestedDateTime,
     string Priority,
     string? Notes,
     string MovementType = "IntraState",
     // Accept plain strings from the browser — <input type="date"> sends "yyyy-MM-dd"
     // and <input type="time"> sends "HH:mm" (no seconds), which TimeOnly rejects.
     string? DepartureDate = null,
-    string? DepartureTime = null
+    string? DepartureTime = null,
+    // ── Personnel & materials ───────────────────────────────────────────────
+    int PersonnelCount = 1,
+    string? PersonnelNames = null,
+    string? PersonnelCategory = null,
+    string? MovementDuration = null,
+    bool IsDropOff = false,
+    bool HasMaterials = false,
+    string? MaterialDescription = null
+    // NOTE: RequestedDateTime is deliberately absent — the server stamps it at
+    // submission so a request cannot be back- or forward-dated.
 );
 
 public record AssignmentDto(

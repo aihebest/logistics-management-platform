@@ -61,7 +61,15 @@ public class FuelController(
         if (dto.OdometerTo.HasValue)      { Track("Odometer To", log.OdometerTo, dto.OdometerTo);          log.OdometerTo = dto.OdometerTo; }
         if (dto.FuelGaugeBefore.HasValue) { Track("Gauge Before", log.FuelGaugeBefore, dto.FuelGaugeBefore); log.FuelGaugeBefore = dto.FuelGaugeBefore; }
         if (dto.FuelGaugeAfter.HasValue)  { Track("Gauge After", log.FuelGaugeAfter, dto.FuelGaugeAfter);  log.FuelGaugeAfter = dto.FuelGaugeAfter; }
-        if (dto.IsCashPayment.HasValue)   { Track("Payment", log.IsCashPayment ? "Cash" : "Card/Transfer", dto.IsCashPayment.Value ? "Cash" : "Card/Transfer"); log.IsCashPayment = dto.IsCashPayment.Value; }
+        if (dto.PaymentMethod != null)
+        {
+            var method = NormalisePaymentMethod(dto.PaymentMethod);
+            if (method == null)
+                return BadRequest(new { error = $"Payment method must be one of: {string.Join(", ", PaymentMethods)}." });
+            Track("Payment", log.PaymentMethod, method);
+            log.PaymentMethod = method;
+            log.IsCashPayment = method == "Cash";   // keep the legacy flag consistent
+        }
         if (dto.CostCentre != null)       { Track("Cost Centre", log.CostCentre, dto.CostCentre);          log.CostCentre = dto.CostCentre; }
         if (dto.StationName != null)      { Track("Station", log.StationName, dto.StationName);            log.StationName = dto.StationName; }
         if (dto.Notes != null)            { Track("Notes", log.Notes, dto.Notes);                          log.Notes = dto.Notes; }
@@ -126,6 +134,10 @@ public class FuelController(
         var caller = await currentUser.ResolveOrProvisionAsync(User);
         if (caller == null) return Unauthorized();
 
+        var paymentMethod = NormalisePaymentMethod(dto.PaymentMethod);
+        if (paymentMethod == null)
+            return BadRequest(new { error = $"Payment method must be one of: {string.Join(", ", PaymentMethods)}." });
+
         var totalCost = dto.LitresFilled * dto.CostPerLitre;
 
         int? mileageCovered = null;
@@ -142,7 +154,8 @@ public class FuelController(
             LitresFilled = dto.LitresFilled,
             CostPerLitre = dto.CostPerLitre,
             TotalCost = totalCost,
-            IsCashPayment = dto.IsCashPayment,
+            PaymentMethod = paymentMethod,
+            IsCashPayment = paymentMethod == "Cash",   // legacy flag kept in step
             OdometerAtFill = dto.OdometerAtFill,
             OdometerFrom = dto.OdometerFrom,
             OdometerTo = dto.OdometerTo,
@@ -175,12 +188,28 @@ public class FuelController(
         return CreatedAtAction(nameof(GetAll), new { id = log.Id }, ToDto(log));
     }
 
+    /// <summary>
+    /// The four ways fuel gets paid for, as confirmed by the Director of Logistics.
+    /// </summary>
+    private static readonly string[] PaymentMethods = ["Card", "Cash", "Credit", "Transfer"];
+
+    /// <summary>
+    /// Accepts any casing and returns the canonical value, or null when the value
+    /// isn't one we recognise. Blank falls back to Card, which is the common case.
+    /// </summary>
+    private static string? NormalisePaymentMethod(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "Card";
+        return PaymentMethods.FirstOrDefault(m => string.Equals(m, value.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
     private static FuelLogDto ToDto(Models.Entities.FuelLog f) => new(
         f.Id, f.VehicleId, f.Vehicle.RegistrationNo,
         f.LoggedBy?.FullName ?? "",
         f.FuelDate,
         f.ProductType ?? "PMS",
         f.LitresFilled, f.CostPerLitre, f.TotalCost,
+        string.IsNullOrWhiteSpace(f.PaymentMethod) ? (f.IsCashPayment ? "Cash" : "Card") : f.PaymentMethod,
         f.IsCashPayment,
         f.OdometerAtFill,
         f.OdometerFrom, f.OdometerTo, f.MileageCovered,

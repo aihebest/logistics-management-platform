@@ -7,6 +7,16 @@ import toast from 'react-hot-toast'
 
 const PRODUCT_TYPES = ['Petrol', 'Diesel']
 
+/** The four ways fuel gets paid for, confirmed by the Director of Logistics. */
+const PAYMENT_METHODS = ['Card', 'Cash', 'Credit', 'Transfer']
+
+const PAYMENT_STYLES: Record<string, string> = {
+  Card:     'bg-green-100 text-green-800',
+  Cash:     'bg-yellow-100 text-yellow-800',
+  Credit:   'bg-orange-100 text-orange-800',
+  Transfer: 'bg-blue-100 text-blue-800',
+}
+
 export default function FuelPage() {
   const qc = useQueryClient()
   const { hasRole } = useAuth()
@@ -73,8 +83,7 @@ export default function FuelPage() {
         odometerTo: num('odometerTo'),
         stationName: str('stationName'),
         costCentre: str('costCentre'),
-        isCashPayment: str('isCashPayment') === 'Cash' ? true
-                     : str('isCashPayment') === 'Card/Transfer' ? false : undefined,
+        paymentMethod: str('paymentMethod'),
         notes: str('notes'),
         correctionReason: str('correctionReason'),
       },
@@ -93,7 +102,7 @@ export default function FuelPage() {
       litresFilled: Number(fd.get('litresFilled')),
       costPerLitre: Number(fd.get('costPerLitre')),
       odometerAtFill: Number(fd.get('odometerAtFill')),
-      isCashPayment: fd.get('isCashPayment') === 'on',
+      paymentMethod: fd.get('paymentMethod') as string || 'Card',
       odometerFrom: odomFrom,
       odometerTo: odomTo,
       fuelGaugeBefore: fd.get('fuelGaugeBefore') ? Number(fd.get('fuelGaugeBefore')) : undefined,
@@ -212,9 +221,11 @@ export default function FuelPage() {
             <div><label className="label">Fuel Gauge Before (%)</label><input name="fuelGaugeBefore" type="number" min={0} max={100} className="input" /></div>
             <div><label className="label">Fuel Gauge After (%)</label><input name="fuelGaugeAfter" type="number" min={0} max={100} className="input" /></div>
             <div><label className="label">Station Name</label><input name="stationName" className="input" /></div>
-            <div className="md:col-span-3 flex items-center gap-2">
-              <input type="checkbox" name="isCashPayment" id="cash" className="h-4 w-4" />
-              <label htmlFor="cash" className="text-sm text-gray-700">Cash Payment</label>
+            <div>
+              <label className="label">Payment Option</label>
+              <select name="paymentMethod" className="input" defaultValue="Card">
+                {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
             </div>
             <div className="md:col-span-3"><label className="label">Notes</label><textarea name="notes" className="input" rows={2} /></div>
             <div className="md:col-span-3 flex gap-3">
@@ -253,9 +264,9 @@ export default function FuelPage() {
             <div><label className="label">Odometer To</label><input name="odometerTo" type="number" min="0" className="input" defaultValue={editing.odometerTo ?? ''} /></div>
             <div><label className="label">Station</label><input name="stationName" className="input" defaultValue={editing.stationName ?? ''} /></div>
             <div>
-              <label className="label">Payment</label>
-              <select name="isCashPayment" className="input" defaultValue={editing.isCashPayment ? 'Cash' : 'Card/Transfer'}>
-                <option>Card/Transfer</option><option>Cash</option>
+              <label className="label">Payment Option</label>
+              <select name="paymentMethod" className="input" defaultValue={editing.paymentMethod ?? (editing.isCashPayment ? 'Cash' : 'Card')}>
+                {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div><label className="label">Cost Centre</label><input name="costCentre" className="input" defaultValue={editing.costCentre ?? ''} /></div>
@@ -304,8 +315,10 @@ export default function FuelPage() {
                     {l.mileageCovered != null ? `${l.mileageCovered.toLocaleString()} km` : l.odometerAtFill ? `${l.odometerAtFill.toLocaleString()} km` : '—'}
                   </td>
                   <td className="px-3 py-3 text-sm">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${l.isCashPayment ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                      {l.isCashPayment ? 'Cash' : 'Card/Transfer'}
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      PAYMENT_STYLES[l.paymentMethod ?? (l.isCashPayment ? 'Cash' : 'Card')] ?? 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {l.paymentMethod ?? (l.isCashPayment ? 'Cash' : 'Card')}
                     </span>
                   </td>
                   <td className="px-3 py-3 text-sm text-gray-500 whitespace-nowrap">{l.loggedByName}</td>

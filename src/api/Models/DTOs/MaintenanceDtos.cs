@@ -65,7 +65,8 @@ public record FuelLogDto(
     decimal LitresFilled,
     decimal CostPerLitre,
     decimal TotalCost,
-    bool IsCashPayment,
+    string PaymentMethod,     // Card | Cash | Credit | Transfer
+    bool IsCashPayment,       // legacy mirror, kept so older clients keep working
     int OdometerAtFill,
     int? OdometerFrom,
     int? OdometerTo,
@@ -88,7 +89,7 @@ public record CreateFuelLogDto(
     decimal LitresFilled,
     decimal CostPerLitre,
     int OdometerAtFill,
-    bool IsCashPayment = false,
+    string PaymentMethod = "Card",   // Card | Cash | Credit | Transfer
     int? OdometerFrom = null,
     int? OdometerTo = null,
     decimal? FuelGaugeBefore = null,
@@ -114,7 +115,7 @@ public record UpdateFuelLogDto(
     int? OdometerTo = null,
     decimal? FuelGaugeBefore = null,
     decimal? FuelGaugeAfter = null,
-    bool? IsCashPayment = null,
+    string? PaymentMethod = null,    // Card | Cash | Credit | Transfer
     string? CostCentre = null,
     string? StationName = null,
     string? Notes = null,

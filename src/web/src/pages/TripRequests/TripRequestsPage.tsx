@@ -10,6 +10,22 @@ import { format } from 'date-fns'
 const STATUS_FILTER = ['', 'Pending', 'Approved', 'Active', 'Ongoing', 'Unattended', 'Completed', 'Rejected', 'Cancelled']
 const MOVEMENT_TYPES = ['IntraState', 'Interstate', 'International']
 
+/** Staff grades, as set out by the HOD and Director of Logistics. */
+const PERSONNEL_CATEGORIES = [
+  { value: 'Director',       label: 'Director' },
+  { value: 'Manager',        label: 'Manager' },
+  { value: 'MidManagement',  label: 'Mid-Management Staff' },
+  { value: 'SeniorStaff',    label: 'Senior Staff' },
+  { value: 'JuniorStaff',    label: 'Junior Staff' },
+]
+
+const MOVEMENT_DURATIONS = ['Half Day', 'Full Day', '2-3 Days', '4-7 Days', 'Over a Week']
+
+/** Turns the stored category value back into the label people recognise. */
+function categoryLabel(value: string) {
+  return PERSONNEL_CATEGORIES.find(c => c.value === value)?.label ?? value
+}
+
 const LOCATIONS = [
   'Desicon Engineering - Head Office, Lagos',
   'Desicon Engineering - Lekki Office',
@@ -60,11 +76,15 @@ export default function TripRequestsPage() {
 
   const availableDrivers = drivers.filter(d => d.driverStatus === 'Available')
 
-  // Requests must be at least 24h out (unless Urgent), so default the form to
+  // Departure must be at least 24h out (unless Urgent), so default the form to
   // ~25h ahead and stop the date picker offering anything earlier.
-  const minDateTime = localDateTimeIn(24)
-  const defaultDateTime = localDateTimeIn(25)
+  const minDate = localDateIn(24)
   const defaultDate = localDateIn(25)
+
+  // Personnel count drives whether names are required; materials drives the
+  // description field. Controlled so the form can react as they're changed.
+  const [personnelCount, setPersonnelCount] = useState(1)
+  const [hasMaterials, setHasMaterials] = useState(false)
 
   const { data: trips = [], isLoading } = useQuery({
     queryKey: ['trips', statusFilter],
@@ -138,18 +158,28 @@ export default function TripRequestsPage() {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    // The request date is stamped by the server, so it isn't sent from here —
+    // that's what stops a request being back- or forward-dated.
     createTrip.mutate({
       purpose: fd.get('purpose') as string,
       pickupLocation: fd.get('pickupLocation') as string,
       destinationLocation: fd.get('destinationLocation') as string,
-      requestedDateTime: fd.get('requestedDateTime') as string,
       priority: fd.get('priority') as string,
       notes: fd.get('notes') as string || undefined,
       movementType: fd.get('movementType') as string,
       departureDate: fd.get('departureDate') as string || undefined,
       departureTime: fd.get('departureTime') as string || undefined,
+      personnelCount: Number(fd.get('personnelCount')) || 1,
+      personnelNames: (fd.get('personnelNames') as string)?.trim() || undefined,
+      personnelCategory: fd.get('personnelCategory') as string || undefined,
+      movementDuration: fd.get('movementDuration') as string || undefined,
+      isDropOff: fd.get('isDropOff') === 'on',
+      hasMaterials: fd.get('hasMaterials') === 'on',
+      materialDescription: (fd.get('materialDescription') as string)?.trim() || undefined,
     })
   }
+
+  const resetForm = () => { setPersonnelCount(1); setHasMaterials(false); setShowForm(false) }
 
   if (isLoading) return <PageLoader />
 
@@ -157,8 +187,9 @@ export default function TripRequestsPage() {
     <div className="space-y-4">
       {/* SOP Notice */}
       <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
-        <strong>Notice:</strong> All vehicle requests must be submitted at least <strong>24 hours</strong> in advance.
+        <strong>Notice:</strong> Departure must be at least <strong>24 hours</strong> after the request is raised.
         Interstate and International movements require manager approval before a driver is assigned.
+        The date and time of the request are recorded automatically when you submit.
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -203,13 +234,13 @@ export default function TripRequestsPage() {
               </select>
             </div>
             <div>
-              <label className="label">Requested Date & Time</label>
+              <label className="label">Departure Date</label>
               <input
-                name="requestedDateTime"
-                type="datetime-local"
+                name="departureDate"
+                type="date"
                 className="input"
-                defaultValue={defaultDateTime}
-                min={minDateTime}
+                defaultValue={defaultDate}
+                min={minDate}
                 required
               />
               <p className="text-xs text-gray-500 mt-1">
@@ -217,26 +248,101 @@ export default function TripRequestsPage() {
               </p>
             </div>
             <div>
-              <label className="label">Departure Date</label>
-              <input
-                name="departureDate"
-                type="date"
-                className="input"
-                defaultValue={defaultDate}
-                min={localDateIn(0)}
-              />
-            </div>
-            <div>
               <label className="label">Departure Time</label>
               <input name="departureTime" type="time" className="input" />
             </div>
+
+            {/* ── Personnel travelling ─────────────────────────────────────── */}
+            <div className="md:col-span-2 pt-2 border-t border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-700">Personnel</h3>
+            </div>
+            <div>
+              <label className="label">Number of Personnel</label>
+              <input
+                name="personnelCount"
+                type="number"
+                min={1}
+                max={50}
+                className="input"
+                value={personnelCount}
+                onChange={e => setPersonnelCount(Math.max(1, Number(e.target.value) || 1))}
+                required
+              />
+            </div>
+            <div>
+              <label className="label">Category of Personnel</label>
+              <select name="personnelCategory" className="input" defaultValue="">
+                <option value="">Select…</option>
+                {PERSONNEL_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            {personnelCount > 1 && (
+              <div className="md:col-span-2">
+                <label className="label">
+                  Names of Personnel Travelling <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  name="personnelNames"
+                  className="input"
+                  rows={2}
+                  required
+                  placeholder="One name per line, or separated by commas"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Required when more than one person is travelling.
+                </p>
+              </div>
+            )}
+
+            {/* ── Movement detail ──────────────────────────────────────────── */}
+            <div>
+              <label className="label">Duration of Movement</label>
+              <select name="movementDuration" className="input" defaultValue="">
+                <option value="">Select…</option>
+                {MOVEMENT_DURATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div className="flex items-end pb-2">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="isDropOff" className="h-4 w-4" />
+                Drop-off only (vehicle does not wait)
+              </label>
+            </div>
+
+            {/* ── Materials ────────────────────────────────────────────────── */}
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  name="hasMaterials"
+                  className="h-4 w-4"
+                  checked={hasMaterials}
+                  onChange={e => setHasMaterials(e.target.checked)}
+                />
+                Materials are travelling with this movement
+              </label>
+            </div>
+            {hasMaterials && (
+              <div className="md:col-span-2">
+                <label className="label">
+                  What materials? <span className="text-red-500">*</span>
+                </label>
+                <input
+                  name="materialDescription"
+                  className="input"
+                  required
+                  placeholder="e.g. 4 drums of lubricant, 2 valve assemblies"
+                />
+              </div>
+            )}
+
             <div className="md:col-span-2">
               <label className="label">Additional Notes</label>
               <textarea name="notes" className="input" rows={2} />
             </div>
             <div className="md:col-span-2 flex gap-3">
               <button type="submit" className="btn-primary" disabled={createTrip.isPending}>Submit Request</button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="btn-secondary" onClick={resetForm}>Cancel</button>
             </div>
           </form>
         </div>
@@ -262,6 +368,17 @@ export default function TripRequestsPage() {
                   Requested by {t.requestedByName} · {format(new Date(t.requestedDateTime), 'PPp')}
                   {t.departureDate && ` · Departs: ${t.departureDate}${t.departureTime ? ` at ${t.departureTime}` : ''}`}
                 </p>
+                {/* Who and what is travelling — approvers need this before deciding. */}
+                <p className="text-xs text-gray-500 mt-1">
+                  {t.personnelCount ?? 1} personnel
+                  {t.personnelCategory && ` · ${categoryLabel(t.personnelCategory)}`}
+                  {t.movementDuration && ` · ${t.movementDuration}`}
+                  {t.isDropOff && ' · Drop-off only'}
+                  {t.hasMaterials && ` · Materials: ${t.materialDescription ?? 'yes'}`}
+                </p>
+                {t.personnelNames && (
+                  <p className="text-xs text-gray-500 mt-0.5">Travelling: {t.personnelNames}</p>
+                )}
                 {t.assignment && (
                   <p className="text-xs text-blue-600 mt-1">
                     Assigned: {t.assignment.driverName} · {t.assignment.vehicleReg}

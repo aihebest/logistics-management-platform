@@ -17,7 +17,9 @@ public class FuelLog
     public int? OdometerFrom { get; set; }                    // Mileage reading From
     public int? OdometerTo { get; set; }                      // Mileage reading To
     public int? MileageCovered { get; set; }                  // Auto: OdometerTo - OdometerFrom
-    public bool IsCashPayment { get; set; }
+    public bool IsCashPayment { get; set; }              // legacy — superseded by PaymentMethod
+    /// <summary>Card | Cash | Credit | Transfer</summary>
+    public string PaymentMethod { get; set; } = "Card";
     public string? StationName { get; set; }
     public string? ReceiptBlobUrl { get; set; }
     public string? Notes { get; set; }

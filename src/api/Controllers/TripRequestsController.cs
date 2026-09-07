@@ -59,17 +59,42 @@ public class TripRequestsController(
         if (caller == null)
             return Unauthorized(new { error = "Cannot resolve user identity from token" });
 
-        // ── Business rule: submit at least 24 hours in advance ────────────────
-        // Urgent-priority requests are exempt so genuine emergencies aren't blocked.
+        // Departure is when they actually travel. DepartureDate arrives as
+        // "yyyy-MM-dd" and DepartureTime as "HH:mm" from the browser inputs.
+        DateOnly? departureDate = DateOnly.TryParse(dto.DepartureDate, out var depDate) ? depDate : null;
+        if (departureDate == null)
+            return BadRequest(new { error = "A departure date is required." });
+
+        // Departure time is optional. When it's left blank, judge the 24-hour rule
+        // on the date alone (end of that day) rather than assuming midnight, so a
+        // request isn't rejected over a time the requester never entered.
+        var departureAt = TimeOnly.TryParse(dto.DepartureTime, out var depTime)
+            ? departureDate.Value.ToDateTime(depTime)
+            : departureDate.Value.ToDateTime(new TimeOnly(23, 59));
+
+        // ── Business rule: travel at least 24 hours after the request is raised ──
+        // Measured against departure, not a date the requester types, so it cannot
+        // be sidestepped. Urgent priority is exempt for genuine emergencies.
         var isUrgent = string.Equals(dto.Priority, "Urgent", StringComparison.OrdinalIgnoreCase);
-        if (!isUrgent && dto.RequestedDateTime < DateTime.UtcNow.AddHours(24))
+        if (!isUrgent && departureAt < DateTime.UtcNow.AddHours(24))
         {
             return BadRequest(new
             {
-                error = "Trip requests must be submitted at least 24 hours in advance. " +
+                error = "Departure must be at least 24 hours from now. " +
                         "For same-day or next-day travel, set the priority to Urgent."
             });
         }
+
+        // ── Personnel details ────────────────────────────────────────────────
+        var personnelCount = dto.PersonnelCount < 1 ? 1 : dto.PersonnelCount;
+        var personnelNames = string.IsNullOrWhiteSpace(dto.PersonnelNames) ? null : dto.PersonnelNames.Trim();
+
+        // Names matter for accountability once more than one person travels.
+        if (personnelCount > 1 && personnelNames == null)
+            return BadRequest(new { error = "Please list the names of everyone travelling when more than one person is on the trip." });
+
+        if (dto.HasMaterials && string.IsNullOrWhiteSpace(dto.MaterialDescription))
+            return BadRequest(new { error = "Please describe the materials travelling with this movement." });
 
         var trip = new Models.Entities.TripRequest
         {
@@ -78,14 +103,23 @@ public class TripRequestsController(
             Purpose             = dto.Purpose,
             PickupLocation      = dto.PickupLocation,
             DestinationLocation = dto.DestinationLocation,
-            RequestedDateTime   = dto.RequestedDateTime,
+            // Server-stamped: the moment the request was raised. Never taken from
+            // the client, so it cannot be back- or forward-dated.
+            RequestedDateTime   = DateTime.UtcNow,
             Status              = "Pending",   // awaits coordinator/manager approval
             Priority            = dto.Priority,
             Notes               = dto.Notes,
             MovementType        = dto.MovementType,
-            // DepartureDate arrives as "yyyy-MM-dd" string; DepartureTime as "HH:mm"
-            DepartureDate       = DateOnly.TryParse(dto.DepartureDate, out var depDate) ? depDate : null,
+            DepartureDate       = departureDate,
             DepartureTime       = dto.DepartureTime,   // already "HH:mm" — store as-is
+            PersonnelCount      = personnelCount,
+            PersonnelNames      = personnelNames,
+            PersonnelCategory   = string.IsNullOrWhiteSpace(dto.PersonnelCategory) ? null : dto.PersonnelCategory,
+            MovementDuration    = string.IsNullOrWhiteSpace(dto.MovementDuration) ? null : dto.MovementDuration,
+            IsDropOff           = dto.IsDropOff,
+            HasMaterials        = dto.HasMaterials,
+            MaterialDescription = dto.HasMaterials && !string.IsNullOrWhiteSpace(dto.MaterialDescription)
+                                    ? dto.MaterialDescription.Trim() : null,
             CreatedAt           = DateTime.UtcNow
         };
 
@@ -177,6 +211,11 @@ public class TripRequestsController(
 
             db.Assignments.Add(assignment);
             trip.Status = "Active";   // approved & driver assigned — trip is now live
+
+            // The approved trip opens its own Movement Register entry, so the gate
+            // and the register reflect the movement without anyone re-typing it.
+            await OpenMovementRegisterEntryAsync(trip, driver.Id, vehicle.Id, approver.Id);
+
             await db.SaveChangesAsync();
 
             // Reload navigation properties for notifications
@@ -202,6 +241,17 @@ public class TripRequestsController(
                 // that the request is stuck waiting for capacity.
                 await notifications.SendTripRequestApprovedAsync(trip);
                 await notifications.SendNoDriverAvailableAsync(trip);
+            }
+            else
+            {
+                // Auto-assignment found a driver and vehicle — open the register
+                // entry for that pairing, same as the manual path above.
+                var auto = await db.Assignments.FirstOrDefaultAsync(a => a.TripRequestId == trip.Id);
+                if (auto != null)
+                {
+                    await OpenMovementRegisterEntryAsync(trip, auto.DriverId, auto.VehicleId, approver.Id);
+                    await db.SaveChangesAsync();
+                }
             }
         }
 
@@ -269,26 +319,48 @@ public class TripRequestsController(
             }
         }
 
-        // Auto-log the completed trip in the Movement Register (closed entry),
-        // so every completed movement has a permanent timestamped record.
+        // The register entry was opened when the trip was approved. Close that one
+        // rather than adding a second row, so the gate log shows one movement out
+        // and back, and whatever mileage the gate recorded is preserved.
         var caller = await currentUser.ResolveOrProvisionAsync(User);
-        db.MovementRegisters.Add(new Models.Entities.MovementRegister
+        var refNo  = TripRef(trip.Id);
+
+        var open = await db.MovementRegisters
+            .Where(m => m.RelatedRefNo == refNo && m.Status == "Open")
+            .OrderByDescending(m => m.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (open != null)
         {
-            Id               = Guid.NewGuid(),
-            MovementType     = "VehicleOut",
-            VehicleId        = trip.Assignment?.VehicleId,
-            DriverId         = trip.Assignment?.DriverId,
-            RelatedRefNo     = trip.Id.ToString()[..8].ToUpper(),
-            Purpose          = trip.Purpose,
-            Origin           = trip.PickupLocation,
-            Destination      = trip.DestinationLocation,
-            MovementDateTime = trip.Assignment?.StartTime ?? trip.RequestedDateTime,
-            ReturnDateTime   = DateTime.UtcNow,
-            Status           = "Closed",
-            Notes            = $"Auto-logged on trip completion. Priority: {trip.Priority}.",
-            LoggedById       = caller?.Id ?? trip.RequestedById,
-            CreatedAt        = DateTime.UtcNow
-        });
+            open.Status         = "Closed";
+            open.ReturnDateTime ??= DateTime.UtcNow;
+            open.Notes = string.IsNullOrWhiteSpace(open.Notes)
+                ? "Closed automatically on trip completion."
+                : $"{open.Notes} Closed automatically on trip completion.";
+        }
+        else
+        {
+            // Older trips approved before auto-opening existed, or entries a
+            // coordinator deleted — fall back to a single closed record.
+            db.MovementRegisters.Add(new Models.Entities.MovementRegister
+            {
+                Id               = Guid.NewGuid(),
+                MovementType     = "VehicleOut",
+                VehicleId        = trip.Assignment?.VehicleId,
+                DriverId         = trip.Assignment?.DriverId,
+                RelatedRefNo     = refNo,
+                Purpose          = trip.Purpose,
+                Passengers       = trip.PersonnelNames,
+                Origin           = trip.PickupLocation,
+                Destination      = trip.DestinationLocation,
+                MovementDateTime = trip.Assignment?.StartTime ?? trip.RequestedDateTime,
+                ReturnDateTime   = DateTime.UtcNow,
+                Status           = "Closed",
+                Notes            = $"Auto-logged on trip completion. Priority: {trip.Priority}.",
+                LoggedById       = caller?.Id ?? trip.RequestedById,
+                CreatedAt        = DateTime.UtcNow
+            });
+        }
 
         await db.SaveChangesAsync();
         await notifications.SendTripCompletedAsync(trip);
@@ -343,6 +415,60 @@ public class TripRequestsController(
         return NoContent();
     }
 
+    /// <summary>Short human-readable reference linking a trip to its register entry.</summary>
+    private static string TripRef(Guid tripId) => tripId.ToString()[..8].ToUpper();
+
+    /// <summary>
+    /// Opens a Movement Register entry for an approved trip.
+    ///
+    /// Requested by the HOD and Director of Logistics: once a trip is approved and
+    /// a driver and vehicle are assigned, the register should already carry the
+    /// movement so the gate only has to fill in mileage and time in. Does not call
+    /// SaveChanges — the caller saves so the assignment and the entry commit together.
+    /// </summary>
+    private async Task OpenMovementRegisterEntryAsync(
+        Models.Entities.TripRequest trip, Guid driverId, Guid vehicleId, Guid loggedById)
+    {
+        var refNo = TripRef(trip.Id);
+
+        // Approving twice, or re-approving after a change, must not duplicate the row.
+        var exists = await db.MovementRegisters.AnyAsync(m => m.RelatedRefNo == refNo);
+        if (exists) return;
+
+        // Prefer the planned departure; fall back to now if none was given.
+        var movementAt = trip.DepartureDate.HasValue
+            ? trip.DepartureDate.Value.ToDateTime(
+                TimeOnly.TryParse(trip.DepartureTime, out var dt) ? dt : TimeOnly.MinValue)
+            : DateTime.UtcNow;
+
+        var detail = new List<string> { $"Auto-created from approved trip request {refNo}." };
+        if (trip.PersonnelCount > 1)                          detail.Add($"{trip.PersonnelCount} personnel.");
+        if (!string.IsNullOrWhiteSpace(trip.PersonnelCategory)) detail.Add($"Category: {trip.PersonnelCategory}.");
+        if (!string.IsNullOrWhiteSpace(trip.MovementDuration))  detail.Add($"Duration: {trip.MovementDuration}.");
+        if (trip.IsDropOff)                                   detail.Add("Drop-off only.");
+        if (trip.HasMaterials)                                detail.Add($"Materials: {trip.MaterialDescription}.");
+
+        db.MovementRegisters.Add(new Models.Entities.MovementRegister
+        {
+            Id               = Guid.NewGuid(),
+            MovementType     = "VehicleOut",
+            VehicleId        = vehicleId,
+            DriverId         = driverId,
+            RelatedRefNo     = refNo,
+            Purpose          = trip.Purpose,
+            Passengers       = trip.PersonnelNames,
+            Origin           = trip.PickupLocation,
+            Destination      = trip.DestinationLocation,
+            MovementDateTime = movementAt,
+            Status           = "Open",       // gate closes it with mileage and time in
+            Notes            = string.Join(" ", detail),
+            LoggedById       = loggedById,
+            CreatedAt        = DateTime.UtcNow
+        });
+
+        logger.LogInformation("Opened Movement Register entry for approved trip {Ref}", refNo);
+    }
+
     private static TripRequestDto ToDto(Models.Entities.TripRequest t)
     {
         var a = t.Assignment;
@@ -355,6 +481,13 @@ public class TripRequestsController(
                 a.Status, a.StartTime, a.EstimatedEndTime),
             t.MovementType ?? "IntraState",
             t.DepartureDate,
-            string.IsNullOrEmpty(t.DepartureTime) ? null : TimeOnly.Parse(t.DepartureTime));
+            string.IsNullOrEmpty(t.DepartureTime) ? null : TimeOnly.Parse(t.DepartureTime),
+            t.PersonnelCount,
+            t.PersonnelNames,
+            t.PersonnelCategory,
+            t.MovementDuration,
+            t.IsDropOff,
+            t.HasMaterials,
+            t.MaterialDescription);
     }
 }

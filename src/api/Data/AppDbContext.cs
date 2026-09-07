@@ -67,6 +67,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            // Lengths mirror 20260825000000_TripPersonnelAndFuelPaymentMethod so the
+            // model and the database agree — drift here is what caused SQL error 207.
+            e.Property(x => x.PersonnelNames).HasMaxLength(1000);
+            e.Property(x => x.PersonnelCategory).HasMaxLength(50);
+            e.Property(x => x.MovementDuration).HasMaxLength(50);
+            e.Property(x => x.MaterialDescription).HasMaxLength(500);
             e.HasOne(x => x.RequestedBy)
              .WithMany()
              .HasForeignKey(x => x.RequestedById)
@@ -121,6 +127,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Gauge readings are percentages (0–100).
             e.Property(x => x.FuelGaugeBefore).HasColumnType("decimal(5,2)");
             e.Property(x => x.FuelGaugeAfter).HasColumnType("decimal(5,2)");
+            e.Property(x => x.PaymentMethod).HasMaxLength(20);
             e.HasOne(x => x.Vehicle)
              .WithMany(v => v.FuelLogs)
              .HasForeignKey(x => x.VehicleId)
