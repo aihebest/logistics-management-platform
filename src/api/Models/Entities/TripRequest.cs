@@ -27,7 +27,12 @@ public class TripRequest
     // ── Movement detail ──────────────────────────────────────────────────────
     /// <summary>Expected duration, e.g. "Half Day", "Full Day", "2-3 Days".</summary>
     public string? MovementDuration { get; set; }
-    /// <summary>True when the vehicle only drops off and returns, rather than waiting.</summary>
+    /// <summary>
+    /// Shown to users as "Drop Off and Pick Up" — the vehicle drops the party off
+    /// and returns for them, rather than waiting on site. The column keeps its
+    /// original IsDropOff name so no migration is needed; the label is the source
+    /// of truth for what it means to the business.
+    /// </summary>
     public bool IsDropOff { get; set; }
 
     // ── Materials carried ────────────────────────────────────────────────────

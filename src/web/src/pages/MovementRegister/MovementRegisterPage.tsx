@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { movementRegisterApi, vehiclesApi, driversApi, apiErrorMessage } from '../../services/api'
+import {
+  movementRegisterApi, vehiclesApi, driversApi, apiErrorMessage,
+  type MovementRegister,
+} from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
@@ -23,6 +26,10 @@ export default function MovementRegisterPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [closingId, setClosingId] = useState<string | null>(null)
+  // Entry currently open for correction. Register figures feed distance and
+  // vendor reconciliation, so edits are restricted and audited.
+  const [editing, setEditing] = useState<MovementRegister | null>(null)
+  const canEdit = hasRole('Coordinator', 'Manager', 'Admin')
 
   const { data: movements = [], isLoading } = useQuery({
     queryKey: ['movement-register', statusFilter, typeFilter],
@@ -47,6 +54,42 @@ export default function MovementRegisterPage() {
       movementRegisterApi.close(id, returnDateTime, mileageIn),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['movement-register'] }); setClosingId(null); toast.success('Movement closed') },
   })
+
+  const updateMovement = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) => movementRegisterApi.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['movement-register'] })
+      setEditing(null)
+      toast.success('Movement record updated')
+    },
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to update movement record'), { duration: 6000 }),
+  })
+
+  /** Only sends the fields that were actually filled in, so blanks don't wipe data. */
+  const handleUpdate = (e: React.FormEvent<HTMLFormElement>, id: string) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    const str = (k: string) => { const v = (fd.get(k) as string | null)?.trim(); return v ? v : undefined }
+    const num = (k: string) => { const v = (fd.get(k) as string | null)?.trim(); return v ? Number(v) : undefined }
+    updateMovement.mutate({
+      id,
+      data: {
+        vehicleId: str('vehicleId'),
+        driverId: str('driverId'),
+        passengers: str('passengers'),
+        purpose: str('purpose'),
+        origin: str('origin'),
+        destination: str('destination'),
+        movementDateTime: str('movementDateTime'),
+        returnDateTime: str('returnDateTime'),
+        mileageOut: num('mileageOut'),
+        mileageIn: num('mileageIn'),
+        gatePassNo: str('gatePassNo'),
+        status: str('status'),
+        correctionReason: str('correctionReason'),
+      },
+    })
+  }
 
   // Drives the conditional "Specify Type" input when Other is selected.
   const [movementType, setMovementType] = useState(MOVEMENT_TYPES[0].value)
@@ -171,12 +214,97 @@ export default function MovementRegisterPage() {
         </div>
       )}
 
+      {/* ── Correct an existing entry ─────────────────────────────────────────
+          The register is filled at the gate under time pressure, so corrections
+          are a normal part of the workflow rather than an exception. */}
+      {editing && (
+        <div className="card p-5 border-l-4 border-amber-500">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-base font-semibold text-gray-900">
+              Edit Movement — {editing.vehicleReg || 'no vehicle'} · {format(new Date(editing.movementDateTime), 'dd MMM yyyy HH:mm')}
+            </h2>
+            <button onClick={() => setEditing(null)} className="text-gray-400 hover:text-gray-600 text-sm">✕ Close</button>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            Change only what is wrong — leave a field as it is to keep its current value.
+            Distance recalculates from Mileage In − Mileage Out. This correction is
+            recorded in the audit trail with your name.
+          </p>
+          <form onSubmit={e => handleUpdate(e, editing.id)} className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <label className="label">Vehicle</label>
+              <select name="vehicleId" className="input" defaultValue={
+                vehicles.find(v => v.registrationNo === editing.vehicleReg)?.id ?? ''
+              }>
+                <option value="">— unchanged —</option>
+                {vehicles.map(v => <option key={v.id} value={v.id}>{v.registrationNo}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Driver</label>
+              <select name="driverId" className="input" defaultValue={
+                drivers.find(d => d.fullName === editing.driverName)?.id ?? ''
+              }>
+                <option value="">— unchanged —</option>
+                {drivers.map(d => <option key={d.id} value={d.id}>{d.fullName}</option>)}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="label">Passenger(s)</label>
+              <input name="passengers" className="input" defaultValue={editing.passengers ?? ''} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="label">Purpose</label>
+              <input name="purpose" className="input" defaultValue={editing.purpose} />
+            </div>
+            <div><label className="label">From</label><input name="origin" className="input" defaultValue={editing.origin ?? ''} /></div>
+            <div><label className="label">To</label><input name="destination" className="input" defaultValue={editing.destination ?? ''} /></div>
+            <div>
+              <label className="label">Time Out</label>
+              <input name="movementDateTime" type="datetime-local" className="input"
+                     defaultValue={editing.movementDateTime?.slice(0, 16)} />
+            </div>
+            <div>
+              <label className="label">Mileage Out (km)</label>
+              <input name="mileageOut" type="number" min="0" className="input" defaultValue={editing.mileageOut ?? ''} />
+            </div>
+            <div>
+              <label className="label">Time In</label>
+              <input name="returnDateTime" type="datetime-local" className="input"
+                     defaultValue={editing.returnDateTime?.slice(0, 16) ?? ''} />
+            </div>
+            <div>
+              <label className="label">Mileage In (km)</label>
+              <input name="mileageIn" type="number" min="0" className="input" defaultValue={editing.mileageIn ?? ''} />
+            </div>
+            <div><label className="label">Gate Pass No</label><input name="gatePassNo" className="input" defaultValue={editing.gatePassNo ?? ''} /></div>
+            <div>
+              <label className="label">Status</label>
+              <select name="status" className="input" defaultValue={editing.status}>
+                <option>Open</option><option>Closed</option>
+              </select>
+            </div>
+            <div className="col-span-full">
+              <label className="label">Reason for correction <span className="text-red-500">*</span></label>
+              <input name="correctionReason" className="input" required
+                     placeholder="e.g. Mileage In mistyped at the gate — corrected against the vehicle odometer" />
+            </div>
+            <div className="col-span-full flex gap-3">
+              <button type="submit" className="btn-primary" disabled={updateMovement.isPending}>
+                {updateMovement.isPending ? 'Saving…' : 'Save Changes'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['Type', 'Vehicle', 'Driver', 'Passenger(s)', 'Purpose', 'From', 'To', 'Time Out', 'Mileage Out', 'Time In', 'Mileage In', 'Distance', 'Status', 'Actions'].map(h => (
+                {['Vehicle', 'Driver', 'Passenger(s)', 'Purpose', 'From', 'To', 'Time Out', 'Mileage Out', 'Time In', 'Mileage In', 'Distance', 'Status', 'Actions'].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -184,14 +312,6 @@ export default function MovementRegisterPage() {
             <tbody className="divide-y divide-gray-100">
               {movements.map(m => (
                 <tr key={m.id} className={`hover:bg-gray-50 ${m.status === 'Open' ? 'bg-amber-50' : ''}`}>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <span className="text-xs font-medium text-gray-700">
-                      {/* Show the typed detail for "Other", otherwise the standard label */}
-                      {m.movementType === 'Other' && m.movementTypeOther
-                        ? m.movementTypeOther
-                        : MOVEMENT_TYPES.find(t => t.value === m.movementType)?.label ?? m.movementType}
-                    </span>
-                  </td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-700 font-medium">{m.vehicleReg || '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">{m.driverName || '—'}</td>
                   <td className="px-3 py-2 max-w-[160px] truncate text-gray-600" title={m.passengers ?? ''}>{m.passengers || '—'}</td>
@@ -241,11 +361,19 @@ export default function MovementRegisterPage() {
                         <button className="btn-secondary text-xs" onClick={() => setClosingId(m.id)}>Close</button>
                       )
                     )}
+                    {canEdit && closingId !== m.id && (
+                      <button
+                        className="text-xs text-brand-600 hover:underline ml-2"
+                        onClick={() => { setEditing(editing?.id === m.id ? null : m); setClosingId(null) }}
+                      >
+                        Edit
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
               {movements.length === 0 && (
-                <tr><td colSpan={14} className="px-4 py-12 text-center text-gray-400">No movement records found</td></tr>
+                <tr><td colSpan={13} className="px-4 py-12 text-center text-gray-400">No movement records found</td></tr>
               )}
             </tbody>
           </table>

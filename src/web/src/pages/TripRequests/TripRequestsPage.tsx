@@ -10,6 +10,16 @@ import { format } from 'date-fns'
 const STATUS_FILTER = ['', 'Pending', 'Approved', 'Active', 'Ongoing', 'Unattended', 'Completed', 'Rejected', 'Cancelled']
 const MOVEMENT_TYPES = ['IntraState', 'Interstate', 'International']
 
+/**
+ * Minimum notice per movement type, set by the Director of Logistics.
+ * Mirrors MinimumNoticeHours in TripRequestsController — keep the two in step.
+ */
+const NOTICE_HOURS: Record<string, number> = {
+  IntraState: 4,
+  Interstate: 24,
+  International: 24,
+}
+
 /** Staff grades, as set out by the HOD and Director of Logistics. */
 const PERSONNEL_CATEGORIES = [
   { value: 'Director',       label: 'Director' },
@@ -76,15 +86,17 @@ export default function TripRequestsPage() {
 
   const availableDrivers = drivers.filter(d => d.driverStatus === 'Available')
 
-  // Departure must be at least 24h out (unless Urgent), so default the form to
-  // ~25h ahead and stop the date picker offering anything earlier.
-  const minDate = localDateIn(24)
-  const defaultDate = localDateIn(25)
-
   // Personnel count drives whether names are required; materials drives the
   // description field. Controlled so the form can react as they're changed.
   const [personnelCount, setPersonnelCount] = useState(1)
   const [hasMaterials, setHasMaterials] = useState(false)
+  // Movement type sets how much notice is required, so the date picker has to
+  // react to it: intrastate needs 4 hours, interstate/international need 24.
+  const [movementType, setMovementType] = useState(MOVEMENT_TYPES[0])
+
+  const noticeHours = NOTICE_HOURS[movementType] ?? 24
+  const minDate = localDateIn(noticeHours)
+  const defaultDate = localDateIn(noticeHours + 1)
 
   const { data: trips = [], isLoading } = useQuery({
     queryKey: ['trips', statusFilter],
@@ -179,7 +191,12 @@ export default function TripRequestsPage() {
     })
   }
 
-  const resetForm = () => { setPersonnelCount(1); setHasMaterials(false); setShowForm(false) }
+  const resetForm = () => {
+    setPersonnelCount(1)
+    setHasMaterials(false)
+    setMovementType(MOVEMENT_TYPES[0])
+    setShowForm(false)
+  }
 
   if (isLoading) return <PageLoader />
 
@@ -187,9 +204,10 @@ export default function TripRequestsPage() {
     <div className="space-y-4">
       {/* SOP Notice */}
       <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
-        <strong>Notice:</strong> Departure must be at least <strong>24 hours</strong> after the request is raised.
-        Interstate and International movements require manager approval before a driver is assigned.
-        The date and time of the request are recorded automatically when you submit.
+        <strong>Notice:</strong> Minimum notice before departure — <strong>Intrastate 4 hours</strong>,
+        <strong> Interstate and International 24 hours</strong>. Interstate and International movements
+        also require manager approval before a driver is assigned. The date and time of the request are
+        recorded automatically when you submit.
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -223,7 +241,12 @@ export default function TripRequestsPage() {
             </div>
             <div>
               <label className="label">Movement Type</label>
-              <select name="movementType" className="input">
+              <select
+                name="movementType"
+                className="input"
+                value={movementType}
+                onChange={e => setMovementType(e.target.value)}
+              >
                 {MOVEMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
@@ -239,12 +262,17 @@ export default function TripRequestsPage() {
                 name="departureDate"
                 type="date"
                 className="input"
+                // Keyed on the notice window so changing movement type resets the
+                // date to one that is actually allowed, rather than leaving a stale
+                // value the server will reject.
+                key={`departure-${noticeHours}`}
                 defaultValue={defaultDate}
                 min={minDate}
                 required
               />
               <p className="text-xs text-gray-500 mt-1">
-                Must be at least 24 hours ahead. For short notice, set Priority to Urgent.
+                {movementType} movements need at least <strong>{noticeHours} hours</strong> notice.
+                For shorter notice, set Priority to Urgent.
               </p>
             </div>
             <div>
@@ -305,7 +333,7 @@ export default function TripRequestsPage() {
             <div className="flex items-end pb-2">
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" name="isDropOff" className="h-4 w-4" />
-                Drop-off only (vehicle does not wait)
+                Drop Off and Pick Up
               </label>
             </div>
 
@@ -373,7 +401,7 @@ export default function TripRequestsPage() {
                   {t.personnelCount ?? 1} personnel
                   {t.personnelCategory && ` · ${categoryLabel(t.personnelCategory)}`}
                   {t.movementDuration && ` · ${t.movementDuration}`}
-                  {t.isDropOff && ' · Drop-off only'}
+                  {t.isDropOff && ' · Drop off and pick up'}
                   {t.hasMaterials && ` · Materials: ${t.materialDescription ?? 'yes'}`}
                 </p>
                 {t.personnelNames && (

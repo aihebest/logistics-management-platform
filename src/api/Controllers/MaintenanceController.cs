@@ -79,12 +79,11 @@ public class MaintenanceController(AppDbContext db, INotificationService notific
             Category = dto.Category,
             ScheduledDate = dto.ScheduledDate,
             VendorName = dto.VendorName,
-            VendorContact = dto.VendorContact,
             Notes = dto.Notes,
             Status = "Scheduled",
             FaultReported = dto.FaultReported,
             FaultDescription = dto.FaultDescription,
-            DateReported = dto.DateReported,
+            DateReturned = dto.DateReturned,
             PartsReplaced = dto.PartsReplaced,
             RepairRemarks = dto.RepairRemarks,
             CreatedAt = DateTime.UtcNow,
@@ -142,9 +141,9 @@ public class MaintenanceController(AppDbContext db, INotificationService notific
                 record.Vehicle.Status = "Available";
             record.Vehicle.UpdatedAt = DateTime.UtcNow;
         }
+        if (dto.DateReturned.HasValue) record.DateReturned = dto.DateReturned;
         if (dto.Cost.HasValue) record.Cost = dto.Cost;
         if (dto.VendorName != null) record.VendorName = dto.VendorName;
-        if (dto.VendorContact != null) record.VendorContact = dto.VendorContact;
         if (dto.Notes != null) record.Notes = dto.Notes;
         if (dto.AttachmentBlobUrl != null) record.AttachmentBlobUrl = dto.AttachmentBlobUrl;
         if (dto.PartsReplaced != null) record.PartsReplaced = dto.PartsReplaced;
@@ -171,8 +170,8 @@ public class MaintenanceController(AppDbContext db, INotificationService notific
     private static MaintenanceRecordDto ToDto(Models.Entities.MaintenanceRecord m) => new(
         m.Id, m.VehicleId, m.Vehicle.RegistrationNo, m.Type,
         m.Category ?? "Routine",
-        m.ScheduledDate, m.CompletedDate, m.Cost,
-        m.VendorName, m.VendorContact, m.Notes,
+        m.ScheduledDate, m.CompletedDate, m.DateReturned, m.Cost,
+        m.VendorName, m.Notes,
         m.Status, m.AttachmentBlobUrl,
         m.FaultReported, m.FaultDescription, m.DateReported,
         m.PartsReplaced, m.RepairRemarks,

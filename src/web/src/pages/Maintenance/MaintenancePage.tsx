@@ -81,13 +81,14 @@ export default function MaintenancePage() {
       vehicleId: fd.get('vehicleId') as string,
       type: fd.get('type') as string,
       category: fd.get('category') as string,
+      // Sent as scheduledDate because that is still the column name; the form
+      // labels it "Date Reported", which is what the business calls it.
       scheduledDate: fd.get('scheduledDate') as string,
       vendorName: fd.get('vendorName') as string || undefined,
-      vendorContact: fd.get('vendorContact') as string || undefined,
       notes: fd.get('notes') as string || undefined,
       faultReported: category === 'FaultRepair',
       faultDescription: fd.get('faultDescription') as string || undefined,
-      dateReported: fd.get('dateReported') as string || undefined,
+      dateReturned: fd.get('dateReturned') as string || undefined,
       partsReplaced: fd.get('partsReplaced') as string || undefined,
       repairRemarks: fd.get('repairRemarks') as string || undefined,
     })
@@ -170,20 +171,20 @@ export default function MaintenancePage() {
               </select>
             </div>
             <div>
-              <label className="label">Scheduled Date</label>
+              <label className="label">Date Reported</label>
               <input name="scheduledDate" type="date" className="input" required />
             </div>
+            <div>
+              <label className="label">Date Returned</label>
+              <input name="dateReturned" type="date" className="input" />
+              <p className="text-xs text-gray-500 mt-1">Leave blank until the vehicle is back from the workshop.</p>
+            </div>
             <div><label className="label">Vendor / Workshop</label><input name="vendorName" className="input" /></div>
-            <div><label className="label">Vendor Contact</label><input name="vendorContact" className="input" /></div>
             {category === 'FaultRepair' && (
               <>
                 <div className="md:col-span-2">
                   <label className="label">Fault Description</label>
                   <textarea name="faultDescription" className="input" rows={2} placeholder="Describe the fault reported…" />
-                </div>
-                <div>
-                  <label className="label">Date Fault Reported</label>
-                  <input name="dateReported" type="date" className="input" />
                 </div>
                 <div>
                   <label className="label">Parts Replaced</label>
@@ -231,7 +232,8 @@ export default function MaintenancePage() {
                   <p className="text-xs text-gray-500">Remarks: {r.repairRemarks}</p>
                 )}
                 <p className="text-xs text-gray-400 mt-1">
-                  Scheduled: {r.scheduledDate}
+                  Reported: {r.scheduledDate}
+                  {r.dateReturned && ` · Returned: ${r.dateReturned}`}
                   {r.vendorName && ` · ${r.vendorName}`}
                   {r.cost != null && ` · ₦${r.cost.toLocaleString()}`}
                 </p>

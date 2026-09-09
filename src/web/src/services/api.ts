@@ -177,17 +177,17 @@ export interface MaintenanceRecord {
   vehicleReg: string
   type: string
   category: string            // Routine | FaultRepair
-  scheduledDate: string
+  scheduledDate: string       // shown to users as "Date Reported"
+  dateReturned?: string       // vehicle back from the workshop
   completedDate?: string
   cost?: number
   vendorName?: string
-  vendorContact?: string
   notes?: string
   status: string
   attachmentBlobUrl?: string
   faultReported: boolean
   faultDescription?: string
-  dateReported?: string
+  dateReported?: string       // legacy fault-only date, kept for historic records
   partsReplaced?: string
   repairRemarks?: string
   createdAt: string
@@ -454,6 +454,14 @@ export interface MovementRegister {
 export const driversApi = {
   getAll: () => api.get<User[]>('/drivers').then(r => r.data),
   get: (id: string) => api.get<User>(`/drivers/${id}`).then(r => r.data),
+  /** Correct a driver's details. Recorded in the audit trail. */
+  update: (id: string, data: object) => api.patch(`/drivers/${id}`, data),
+  /**
+   * Remove a driver. Drivers with trip, fuel or movement history are deactivated
+   * instead of deleted, so the response says which happened.
+   */
+  remove: (id: string) =>
+    api.delete<{ message: string; deactivated: boolean }>(`/drivers/${id}`).then(r => r.data),
   register: (data: {
     fullName: string
     email?: string
@@ -545,8 +553,19 @@ export const reportsApi = {
     api.get('/reports/vehicles/export', { params: { from, to }, responseType: 'blob' }),
   exportDrivers: (from?: string, to?: string) =>
     api.get('/reports/drivers/export', { params: { from, to }, responseType: 'blob' }),
-  exportFuel: (from?: string, to?: string) =>
-    api.get('/reports/fuel/export', { params: { from, to }, responseType: 'blob' }),
+  /**
+   * Fuel workbook for accounts reconciliation. The optional filters mirror the
+   * Fuel Logs page so the file matches what the user has on screen.
+   */
+  exportFuel: (
+    from?: string,
+    to?: string,
+    filters?: { vehicleId?: string; locationId?: string; productType?: string },
+  ) =>
+    api.get('/reports/fuel/export', {
+      params: { from, to, ...filters },
+      responseType: 'blob',
+    }),
   exportMaintenance: (from?: string, to?: string) =>
     api.get('/reports/maintenance/export', { params: { from, to }, responseType: 'blob' }),
 }
@@ -624,6 +643,8 @@ export const movementRegisterApi = {
   create: (data: object) => api.post<MovementRegister>('/movement-register', data).then(r => r.data),
   close: (id: string, returnDateTime: string, mileageIn?: number) =>
     api.patch(`/movement-register/${id}/close`, { returnDateTime, mileageIn }),
+  /** Correct an existing entry. Recorded in the audit trail. */
+  update: (id: string, data: object) => api.patch(`/movement-register/${id}`, data),
   /** Vehicle-grouped summary with distance totals, for printing / reconciliation. */
   getSummary: (params?: { from?: string; to?: string; vehicleReg?: string }) =>
     api.get<MovementRegisterSummary>('/movement-register/summary', { params }).then(r => r.data),

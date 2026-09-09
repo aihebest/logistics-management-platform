@@ -72,16 +72,19 @@ public class TripRequestsController(
             ? departureDate.Value.ToDateTime(depTime)
             : departureDate.Value.ToDateTime(new TimeOnly(23, 59));
 
-        // ── Business rule: travel at least 24 hours after the request is raised ──
-        // Measured against departure, not a date the requester types, so it cannot
-        // be sidestepped. Urgent priority is exempt for genuine emergencies.
+        // ── Business rule: minimum notice, by movement type ───────────────────
+        // Intrastate travel needs 4 hours' notice; interstate and international
+        // need 24, since they take longer to resource. Measured against departure,
+        // not a date the requester types, so it cannot be sidestepped. Urgent
+        // priority is exempt for genuine emergencies.
+        var noticeHours = MinimumNoticeHours(dto.MovementType);
         var isUrgent = string.Equals(dto.Priority, "Urgent", StringComparison.OrdinalIgnoreCase);
-        if (!isUrgent && departureAt < DateTime.UtcNow.AddHours(24))
+        if (!isUrgent && departureAt < DateTime.UtcNow.AddHours(noticeHours))
         {
             return BadRequest(new
             {
-                error = "Departure must be at least 24 hours from now. " +
-                        "For same-day or next-day travel, set the priority to Urgent."
+                error = $"{dto.MovementType} movements need at least {noticeHours} hours' notice. " +
+                        "For shorter notice, set the priority to Urgent."
             });
         }
 
@@ -414,6 +417,14 @@ public class TripRequestsController(
         await db.SaveChangesAsync();
         return NoContent();
     }
+
+    /// <summary>
+    /// Minimum notice a request needs, in hours, set by the Director of Logistics:
+    /// intrastate 4 hours, interstate and international 24. Anything unrecognised
+    /// gets the stricter figure rather than the looser one.
+    /// </summary>
+    private static int MinimumNoticeHours(string? movementType) =>
+        string.Equals(movementType, "IntraState", StringComparison.OrdinalIgnoreCase) ? 4 : 24;
 
     /// <summary>Short human-readable reference linking a trip to its register entry.</summary>
     private static string TripRef(Guid tripId) => tripId.ToString()[..8].ToUpper();

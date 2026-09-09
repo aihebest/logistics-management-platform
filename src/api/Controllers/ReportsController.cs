@@ -34,13 +34,28 @@ public class ReportsController(IReportingService reporting) : ControllerBase
             $"driver-report-{DateTime.UtcNow:yyyyMMdd}.xlsx");
     }
 
+    /// <summary>
+    /// Fuel workbook for accounts reconciliation. Accepts the same filters as the
+    /// Fuel Logs page so the file matches whatever the user has on screen.
+    /// </summary>
     [HttpGet("fuel/export")]
-    public async Task<IActionResult> ExportFuel([FromQuery] DateTime? from, [FromQuery] DateTime? to)
+    public async Task<IActionResult> ExportFuel(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] Guid? vehicleId,
+        [FromQuery] Guid? locationId,
+        [FromQuery] string? productType)
     {
+        // Default to the last 12 months — reconciliation usually reaches further
+        // back than the one month the other exports assume.
+        var fromDate = from ?? DateTime.UtcNow.AddMonths(-12);
+        var toDate   = to ?? DateTime.UtcNow;
+
         var bytes = await reporting.ExportFuelReportAsync(
-            from ?? DateTime.UtcNow.AddMonths(-1), to ?? DateTime.UtcNow);
+            fromDate, toDate, vehicleId, locationId, productType);
+
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"fuel-report-{DateTime.UtcNow:yyyyMMdd}.xlsx");
+            $"fuel-log_{fromDate:yyyyMMdd}_to_{toDate:yyyyMMdd}.xlsx");
     }
 
     [HttpGet("maintenance/export")]

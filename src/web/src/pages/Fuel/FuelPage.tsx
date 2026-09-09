@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fuelApi, vehiclesApi, locationsApi, apiErrorMessage, type FuelLog } from '../../services/api'
+import {
+  fuelApi, vehiclesApi, locationsApi, reportsApi, downloadBlob,
+  apiErrorMessage, type FuelLog,
+} from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
@@ -27,6 +30,14 @@ export default function FuelPage() {
   const [showForm, setShowForm] = useState(false)
   const [productFilter, setProductFilter] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
+  // Date window for the accounts export. Defaults to the last 12 months, which
+  // covers the reconciliation periods finance normally works in.
+  const [exportFrom, setExportFrom] = useState(() => {
+    const d = new Date(); d.setMonth(d.getMonth() - 12)
+    return d.toISOString().slice(0, 10)
+  })
+  const [exportTo, setExportTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const [exporting, setExporting] = useState(false)
 
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ['fuel', productFilter, locationFilter],
@@ -90,6 +101,35 @@ export default function FuelPage() {
     })
   }
 
+  /**
+   * Downloads the fuel log as an Excel workbook for accounts reconciliation.
+   * Carries the on-screen product and location filters through, so what finance
+   * receives matches what the requester was looking at.
+   */
+  const handleExport = async () => {
+    if (exportFrom > exportTo) {
+      toast.error('The "from" date cannot be after the "to" date')
+      return
+    }
+    setExporting(true)
+    try {
+      const res = await reportsApi.exportFuel(
+        new Date(exportFrom).toISOString(),
+        new Date(exportTo).toISOString(),
+        {
+          productType: productFilter || undefined,
+          locationId: locationFilter || undefined,
+        },
+      )
+      downloadBlob(res.data, `fuel-log_${exportFrom}_to_${exportTo}.xlsx`)
+      toast.success('Excel file downloaded')
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Export failed'), { duration: 6000 })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
@@ -142,6 +182,46 @@ export default function FuelPage() {
           </select>
           <button className="btn-primary" onClick={() => setShowForm(!showForm)}>+ Log Fuel</button>
         </div>
+      </div>
+
+      {/* ── Export for accounts reconciliation ───────────────────────────────
+          Finance works to a period rather than "whatever is on screen", so the
+          date window is explicit here. The location and product filters above
+          carry through to the file. */}
+      <div className="card p-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="label">Export from</label>
+          <input
+            type="date"
+            className="input w-auto"
+            value={exportFrom}
+            max={exportTo}
+            onChange={e => setExportFrom(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label">to</label>
+          <input
+            type="date"
+            className="input w-auto"
+            value={exportTo}
+            min={exportFrom}
+            onChange={e => setExportTo(e.target.value)}
+          />
+        </div>
+        <button className="btn-secondary" onClick={handleExport} disabled={exporting}>
+          {exporting ? 'Preparing…' : '⬇ Export to Excel'}
+        </button>
+        <p className="text-xs text-gray-500 flex-1 min-w-[220px]">
+          Three sheets — transaction detail, totals by payment method, and totals by
+          vehicle. Amounts and dates come through as real numbers and dates, so
+          accounts can filter and total without reformatting.
+          {(locationFilter || productFilter) && (
+            <span className="block text-amber-700 mt-0.5">
+              The location and product filters above will be applied to the file.
+            </span>
+          )}
+        </p>
       </div>
 
       {/* Summary cards */}

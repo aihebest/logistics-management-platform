@@ -220,3 +220,28 @@ public record CloseMovementDto(
     int? MileageIn,
     string? Notes
 );
+
+/// <summary>
+/// Correction to an existing register entry. Every field is optional — only the
+/// values supplied are applied, so the caller can fix one cell without resending
+/// the whole record. Changes are written to the audit trail because the register
+/// is a gate document that feeds distance and vendor reconciliation.
+/// </summary>
+public record UpdateMovementRegisterDto(
+    string? MovementType = null,
+    string? MovementTypeOther = null,
+    string? Passengers = null,
+    Guid? VehicleId = null,
+    Guid? DriverId = null,
+    string? Purpose = null,
+    string? Origin = null,
+    string? Destination = null,
+    DateTime? MovementDateTime = null,
+    DateTime? ReturnDateTime = null,
+    int? MileageOut = null,
+    int? MileageIn = null,
+    string? GatePassNo = null,
+    string? Status = null,          // Open | Closed
+    string? Notes = null,
+    string? CorrectionReason = null // recorded in the audit trail
+);

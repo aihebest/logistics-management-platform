@@ -20,7 +20,8 @@ public class DriversController(AppDbContext db, IAuditService audit) : Controlle
     // returned a conflict, so anyone who had ever logged in could not be
     // registered as a driver at all.
     [HttpPost]
-    [Authorize(Roles = "Manager,Admin")]
+    // Coordinators register drivers day to day — drivers never self-register.
+    [Authorize(Roles = "Coordinator,Manager,Admin")]
     public async Task<ActionResult<UserDto>> Register(RegisterDriverDto dto)
     {
         var emailNorm = dto.Email?.ToLowerInvariant().Trim() ?? string.Empty;
@@ -96,6 +97,122 @@ public class DriversController(AppDbContext db, IAuditService audit) : Controlle
         var user = await db.Users.FindAsync(id);
         if (user == null) return NotFound();
         return ToDto(user);
+    }
+
+    /// <summary>
+    /// Corrects a driver's record. Coordinators and above, since coordinators are
+    /// the ones registering drivers in the first place.
+    /// </summary>
+    [HttpPatch("{id:guid}")]
+    [Authorize(Roles = "Coordinator,Manager,Admin")]
+    public async Task<IActionResult> Update(Guid id, UpdateDriverDto dto)
+    {
+        var driver = await db.Users.FindAsync(id);
+        if (driver is null || driver.Role != "Driver") return NotFound();
+
+        var changes = new List<string>();
+        void Track<T>(string field, T oldValue, T newValue)
+        {
+            if (!Equals(oldValue, newValue))
+                changes.Add($"{field}: {oldValue?.ToString() ?? "—"} → {newValue?.ToString() ?? "—"}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(dto.FullName))
+        {
+            Track("Name", driver.FullName, dto.FullName.Trim());
+            driver.FullName = dto.FullName.Trim();
+        }
+
+        if (dto.Email != null)
+        {
+            // Most Desicon drivers have no email at all, so blank is valid and is
+            // stored as empty rather than null to match how they were registered.
+            var email = dto.Email.Trim().ToLowerInvariant();
+            if (email.Length > 0)
+            {
+                var taken = await db.Users.AnyAsync(u => u.Id != id && u.Email == email);
+                if (taken) return BadRequest(new { error = "Another user already has that email address." });
+            }
+            Track("Email", driver.Email, email);
+            driver.Email = email;
+        }
+
+        if (dto.PhoneNumber != null)   { var v = dto.PhoneNumber.Trim(); Track("Phone", driver.PhoneNumber, v); driver.PhoneNumber = v; }
+        if (dto.LicenceNo != null)     { var v = dto.LicenceNo.Trim();   Track("Licence No", driver.LicenceNo, v); driver.LicenceNo = v; }
+        if (dto.LicenceExpiry.HasValue){ Track("Licence Expiry", driver.LicenceExpiry, dto.LicenceExpiry.Value); driver.LicenceExpiry = dto.LicenceExpiry.Value; }
+        if (dto.IsActive.HasValue)     { Track("Active", driver.IsActive, dto.IsActive.Value); driver.IsActive = dto.IsActive.Value; }
+
+        if (changes.Count == 0)
+            return Ok(new { message = "No changes were made." });
+
+        await db.SaveChangesAsync();
+
+        await audit.LogAsync("Driver", id.ToString(), "Updated",
+            User.GetEntraObjectId() ?? "", User.GetEmail(), null,
+            string.Join("; ", changes));
+
+        return Ok(new { message = "Driver record updated.", changes });
+    }
+
+    /// <summary>
+    /// Removes a driver.
+    ///
+    /// A driver who has been on a trip, held an assignment or logged fuel cannot
+    /// be deleted outright — those records reference them, and losing that link
+    /// would corrupt the history. Those drivers are deactivated instead, which
+    /// takes them out of the assignment lists while leaving the audit trail
+    /// intact. Drivers with no records at all — typically ones created in error
+    /// during testing — are removed properly.
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Coordinator,Manager,Admin")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var driver = await db.Users.FindAsync(id);
+        if (driver is null || driver.Role != "Driver") return NotFound();
+
+        // Every table below has a Restrict foreign key onto Users, so a row in any
+        // of them makes a hard delete fail at the database. Checking them here
+        // turns that into a clear message instead of a 500.
+        var hasHistory =
+               await db.Assignments.AnyAsync(a => a.DriverId == id)
+            || await db.TripRequests.AnyAsync(t => t.RequestedById == id)
+            || await db.FuelLogs.AnyAsync(f => f.LoggedById == id)
+            || await db.MovementRegisters.AnyAsync(m => m.DriverId == id || m.LoggedById == id)
+            || await db.DriverSchedules.AnyAsync(s => s.DriverId == id || s.CreatedById == id)
+            || await db.DriverIncidents.AnyAsync(i => i.DriverId == id || i.ReportedById == id);
+
+        var callerId = User.GetEntraObjectId() ?? "";
+        var callerEmail = User.GetEmail();
+
+        if (hasHistory)
+        {
+            if (!driver.IsActive)
+                return BadRequest(new { error = $"{driver.FullName} is already deactivated." });
+
+            driver.IsActive = false;
+            driver.DriverStatus = "OffDuty";
+            driver.LastStatusChange = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            await audit.LogAsync("Driver", id.ToString(), "Deactivated", callerId, callerEmail, null,
+                $"{driver.FullName} deactivated — has trip, fuel or movement history that must be preserved.");
+
+            return Ok(new
+            {
+                message = $"{driver.FullName} has trip or fuel history, so the record was deactivated " +
+                          "rather than deleted. They no longer appear for assignment.",
+                deactivated = true
+            });
+        }
+
+        db.Users.Remove(driver);
+        await db.SaveChangesAsync();
+
+        await audit.LogAsync("Driver", id.ToString(), "Deleted", callerId, callerEmail, null,
+            $"{driver.FullName} deleted — no trip, fuel or movement records existed.");
+
+        return Ok(new { message = $"{driver.FullName} was deleted.", deactivated = false });
     }
 
     [HttpPatch("{id:guid}/status")]

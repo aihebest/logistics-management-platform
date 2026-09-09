@@ -11,7 +11,11 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/movement-register")]
 [Authorize]
-public class MovementRegisterController(AppDbContext db, ICurrentUserService currentUser) : ControllerBase
+public class MovementRegisterController(
+    AppDbContext db,
+    ICurrentUserService currentUser,
+    IAuditService audit,
+    ILogger<MovementRegisterController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<IEnumerable<MovementRegisterDto>> GetAll(
@@ -160,6 +164,110 @@ public class MovementRegisterController(AppDbContext db, ICurrentUserService cur
 
         return CreatedAtAction(nameof(Get), new { id = entry.Id },
             await GetFullDto(entry.Id));
+    }
+
+    /// <summary>
+    /// Corrects an existing register entry.
+    ///
+    /// The register is filled in at the gate, often in a hurry, so mistakes get
+    /// spotted later — a wrong odometer reading, a driver logged against the wrong
+    /// vehicle, a missing passenger name. Coordinators and above can fix those
+    /// here rather than raising a duplicate entry. Every change is written to the
+    /// audit trail, since these figures feed distance and vendor reconciliation.
+    /// </summary>
+    [HttpPatch("{id:guid}")]
+    [Authorize(Roles = "Coordinator,Manager,Admin")]
+    public async Task<IActionResult> Update(Guid id, UpdateMovementRegisterDto dto)
+    {
+        var entry = await db.MovementRegisters
+            .Include(x => x.Vehicle)
+            .Include(x => x.Driver)
+            .FirstOrDefaultAsync(x => x.Id == id);
+        if (entry == null) return NotFound();
+
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
+        if (caller == null) return Unauthorized(new { error = "Cannot resolve user identity from token" });
+
+        var changes = new List<string>();
+        void Track<T>(string field, T oldValue, T newValue)
+        {
+            if (!Equals(oldValue, newValue))
+                changes.Add($"{field}: {oldValue?.ToString() ?? "—"} → {newValue?.ToString() ?? "—"}");
+        }
+
+        if (dto.VehicleId.HasValue && dto.VehicleId.Value != entry.VehicleId)
+        {
+            var vehicle = await db.Vehicles.FindAsync(dto.VehicleId.Value);
+            if (vehicle == null) return BadRequest(new { error = "Vehicle not found" });
+            Track("Vehicle", entry.Vehicle?.RegistrationNo, vehicle.RegistrationNo);
+            entry.VehicleId = dto.VehicleId.Value;
+        }
+
+        if (dto.DriverId.HasValue && dto.DriverId.Value != entry.DriverId)
+        {
+            var driver = await db.Users.FindAsync(dto.DriverId.Value);
+            if (driver == null) return BadRequest(new { error = "Driver not found" });
+            Track("Driver", entry.Driver?.FullName, driver.FullName);
+            entry.DriverId = dto.DriverId.Value;
+        }
+
+        if (dto.MovementType != null)
+        {
+            Track("Type", entry.MovementType, dto.MovementType);
+            entry.MovementType = dto.MovementType;
+            // Free-text detail only belongs to "Other" — drop it otherwise so a
+            // changed type can't leave a stale description behind.
+            if (dto.MovementType != "Other") entry.MovementTypeOther = null;
+        }
+
+        if (dto.MovementTypeOther != null && entry.MovementType == "Other")
+        {
+            var detail = string.IsNullOrWhiteSpace(dto.MovementTypeOther) ? null : dto.MovementTypeOther.Trim();
+            Track("Type detail", entry.MovementTypeOther, detail);
+            entry.MovementTypeOther = detail;
+        }
+
+        if (dto.Passengers != null)       { var v = string.IsNullOrWhiteSpace(dto.Passengers) ? null : dto.Passengers.Trim(); Track("Passengers", entry.Passengers, v); entry.Passengers = v; }
+        if (dto.Purpose != null)          { Track("Purpose", entry.Purpose, dto.Purpose);                     entry.Purpose = dto.Purpose; }
+        if (dto.Origin != null)           { Track("From", entry.Origin, dto.Origin);                          entry.Origin = dto.Origin; }
+        if (dto.Destination != null)      { Track("To", entry.Destination, dto.Destination);                  entry.Destination = dto.Destination; }
+        if (dto.MovementDateTime.HasValue){ Track("Time Out", entry.MovementDateTime, dto.MovementDateTime.Value); entry.MovementDateTime = dto.MovementDateTime.Value; }
+        if (dto.ReturnDateTime.HasValue)  { Track("Time In", entry.ReturnDateTime, dto.ReturnDateTime.Value); entry.ReturnDateTime = dto.ReturnDateTime.Value; }
+        if (dto.MileageOut.HasValue)      { Track("Mileage Out", entry.MileageOut, dto.MileageOut.Value);     entry.MileageOut = dto.MileageOut.Value; }
+        if (dto.MileageIn.HasValue)       { Track("Mileage In", entry.MileageIn, dto.MileageIn.Value);        entry.MileageIn = dto.MileageIn.Value; }
+        if (dto.GatePassNo != null)       { Track("Gate Pass", entry.GatePassNo, dto.GatePassNo);             entry.GatePassNo = dto.GatePassNo; }
+        if (dto.Notes != null)            { Track("Notes", entry.Notes, dto.Notes);                           entry.Notes = dto.Notes; }
+
+        if (dto.Status != null)
+        {
+            if (dto.Status is not ("Open" or "Closed"))
+                return BadRequest(new { error = "Status must be either Open or Closed." });
+            Track("Status", entry.Status, dto.Status);
+            entry.Status = dto.Status;
+        }
+
+        // A closed movement without a time in has no distance and reads as an
+        // error on the summary, so keep the two consistent.
+        if (entry.Status == "Closed" && entry.ReturnDateTime == null)
+            return BadRequest(new { error = "A closed movement needs a time in. Set the return date and time, or leave the status Open." });
+
+        if (entry.MileageOut.HasValue && entry.MileageIn.HasValue && entry.MileageIn < entry.MileageOut)
+            return BadRequest(new { error = "Mileage In cannot be lower than Mileage Out." });
+
+        if (changes.Count == 0)
+            return Ok(new { message = "No changes were made." });
+
+        await db.SaveChangesAsync();
+
+        var reason = string.IsNullOrWhiteSpace(dto.CorrectionReason) ? "No reason given" : dto.CorrectionReason.Trim();
+        await audit.LogAsync("MovementRegister", id.ToString(), "Corrected",
+            User.GetEntraObjectId() ?? "", User.GetEmail(), null,
+            $"Reason: {reason}. Changes — {string.Join("; ", changes)}");
+
+        logger.LogInformation("Movement register entry {Id} corrected by {Email}: {Changes}",
+            id, caller.Email, string.Join("; ", changes));
+
+        return Ok(new { message = "Movement record updated.", changes });
     }
 
     [HttpPatch("{id:guid}/close")]

@@ -93,7 +93,7 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<string>("Status").IsRequired().HasMaxLength(20).HasColumnType("nvarchar(20)").HasDefaultValue("Scheduled");
                 b.Property<string>("Type").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
                 b.Property<DateTime>("UpdatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
-                b.Property<string>("VendorContact").HasMaxLength(50).HasColumnType("nvarchar(50)");
+                b.Property<DateOnly?>("DateReturned").HasColumnType("date");
                 b.Property<string>("VendorName").HasMaxLength(100).HasColumnType("nvarchar(100)");
                 b.Property<Guid>("VehicleId").HasColumnType("uniqueidentifier");
                 b.HasKey("Id");

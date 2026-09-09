@@ -8,11 +8,11 @@ public record MaintenanceRecordDto(
     string VehicleReg,
     string Type,
     string Category,          // Routine | FaultRepair
-    DateOnly ScheduledDate,
+    DateOnly ScheduledDate,   // shown to users as "Date Reported"
     DateOnly? CompletedDate,
+    DateOnly? DateReturned,   // vehicle back from the workshop
     decimal? Cost,
     string? VendorName,
-    string? VendorContact,
     string? Notes,
     string Status,
     string? AttachmentBlobUrl,
@@ -29,14 +29,13 @@ public record CreateMaintenanceRecordDto(
     Guid VehicleId,
     string Type,
     string Category,          // Routine | FaultRepair
-    DateOnly ScheduledDate,
+    DateOnly ScheduledDate,   // captured on the form as "Date Reported"
     string? VendorName,
-    string? VendorContact,
     string? Notes,
     // Fault fields (used when Category = FaultRepair)
     bool FaultReported = false,
     string? FaultDescription = null,
-    DateOnly? DateReported = null,
+    DateOnly? DateReturned = null,
     string? PartsReplaced = null,
     string? RepairRemarks = null
 );
@@ -44,9 +43,9 @@ public record CreateMaintenanceRecordDto(
 public record UpdateMaintenanceRecordDto(
     string? Status,
     DateOnly? CompletedDate,
+    DateOnly? DateReturned,
     decimal? Cost,
     string? VendorName,
-    string? VendorContact,
     string? Notes,
     string? AttachmentBlobUrl,
     string? PartsReplaced,

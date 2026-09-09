@@ -56,3 +56,16 @@ public record RegisterDriverDto(
     DateOnly? LicenceExpiry = null,
     string? Email = null   // Optional — only needed if driver will log in via Microsoft account
 );
+
+/// <summary>
+/// Correction to a driver's record. Every field is optional — only the values
+/// supplied are applied, so one detail can be fixed without resending the rest.
+/// </summary>
+public record UpdateDriverDto(
+    string? FullName = null,
+    string? PhoneNumber = null,
+    string? LicenceNo = null,
+    DateOnly? LicenceExpiry = null,
+    string? Email = null,
+    bool? IsActive = null
+);
