@@ -65,7 +65,7 @@ public class TripRequestsController(
         if (departureDate == null)
             return BadRequest(new { error = "A departure date is required." });
 
-        // Departure time is optional. When it's left blank, judge the 24-hour rule
+        // Departure time is optional. When it's left blank, judge the notice rule
         // on the date alone (end of that day) rather than assuming midnight, so a
         // request isn't rejected over a time the requester never entered.
         var departureAt = TimeOnly.TryParse(dto.DepartureTime, out var depTime)
@@ -79,7 +79,7 @@ public class TripRequestsController(
         // priority is exempt for genuine emergencies.
         var noticeHours = MinimumNoticeHours(dto.MovementType);
         var isUrgent = string.Equals(dto.Priority, "Urgent", StringComparison.OrdinalIgnoreCase);
-        if (!isUrgent && departureAt < DateTime.UtcNow.AddHours(noticeHours))
+        if (!isUrgent && departureAt < NowInNigeria.AddHours(noticeHours))
         {
             return BadRequest(new
             {
@@ -426,6 +426,23 @@ public class TripRequestsController(
     private static int MinimumNoticeHours(string? movementType) =>
         string.Equals(movementType, "IntraState", StringComparison.OrdinalIgnoreCase) ? 4 : 24;
 
+    /// <summary>
+    /// Nigeria runs on West Africa Time — a fixed UTC+1 with no daylight saving,
+    /// so a plain offset is safe and avoids depending on the host's timezone
+    /// database (the API runs on Linux App Service, the developers on Windows).
+    /// </summary>
+    private static readonly TimeSpan WestAfricaOffset = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// "Now" as the requester sees it on their own clock.
+    ///
+    /// Departure date and time arrive as local wall-clock values with no timezone
+    /// attached, so the notice rule has to be measured against local time too.
+    /// Comparing them against UtcNow made every rule an hour lenient — barely
+    /// visible on the 24-hour rule, but a quarter of the 4-hour intrastate one.
+    /// </summary>
+    private static DateTime NowInNigeria => DateTime.UtcNow + WestAfricaOffset;
+
     /// <summary>Short human-readable reference linking a trip to its register entry.</summary>
     private static string TripRef(Guid tripId) => tripId.ToString()[..8].ToUpper();
 
@@ -446,11 +463,13 @@ public class TripRequestsController(
         var exists = await db.MovementRegisters.AnyAsync(m => m.RelatedRefNo == refNo);
         if (exists) return;
 
-        // Prefer the planned departure; fall back to now if none was given.
+        // Prefer the planned departure; fall back to now if none was given. Local
+        // time either way — the gate reads this column as a wall-clock time, so a
+        // UTC fallback would show an hour behind everything around it.
         var movementAt = trip.DepartureDate.HasValue
             ? trip.DepartureDate.Value.ToDateTime(
                 TimeOnly.TryParse(trip.DepartureTime, out var dt) ? dt : TimeOnly.MinValue)
-            : DateTime.UtcNow;
+            : NowInNigeria;
 
         var detail = new List<string> { $"Auto-created from approved trip request {refNo}." };
         if (trip.PersonnelCount > 1)                          detail.Add($"{trip.PersonnelCount} personnel.");
