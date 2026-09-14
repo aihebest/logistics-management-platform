@@ -55,37 +55,50 @@ public class MaintenanceReminderJob(
         try
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var checkpoints = new[] { 14, 7, 3, 0 }; // days before due
 
-            var upcoming = await db.MaintenanceRecords
-                .Include(m => m.Vehicle)
-                .Where(m => m.Status == "Scheduled"
-                         && m.ScheduledDate >= today
-                         && m.ScheduledDate <= today.AddDays(14))
+            // ── Upcoming services ────────────────────────────────────────────
+            // Driven by the vehicle's own NextServiceDate, set when a service is
+            // completed. This used to read a maintenance record's date, but that
+            // column now records when a fault was *reported* — always today or
+            // earlier — so the forward-looking window never matched and these
+            // reminders had quietly stopped going out altogether.
+            var horizon = today.AddDays(MaintenancePolicy.ServiceReminderCheckpoints.Max());
+
+            var dueSoon = await db.Vehicles
+                .Where(v => v.Status != "OutOfService"
+                         && v.NextServiceDate != null
+                         && v.NextServiceDate >= today
+                         && v.NextServiceDate <= horizon)
                 .ToListAsync(ct);
 
-            foreach (var record in upcoming)
+            foreach (var vehicle in dueSoon)
             {
-                var daysUntil = record.ScheduledDate.DayNumber - today.DayNumber;
-                if (!checkpoints.Contains(daysUntil)) continue;
+                var daysUntil = vehicle.NextServiceDate!.Value.DayNumber - today.DayNumber;
+                if (!MaintenancePolicy.ServiceReminderCheckpoints.Contains(daysUntil)) continue;
 
-                // At most one reminder per record per day, whatever else happens.
+                // At most one reminder per vehicle per day, whatever else happens.
                 // These go to a distribution list, so a repeat is not a harmless
                 // duplicate — it trains the team to ignore the alert entirely.
-                if (AlreadySentToday(record.LastReminderSentAt, today)) continue;
+                if (AlreadySentToday(vehicle.LastServiceReminderAt, today)) continue;
 
-                await notifications.SendMaintenanceDueAsync(record, daysUntil);
-                record.LastReminderSentAt = DateTime.UtcNow;
+                await notifications.SendVehicleServiceDueAsync(vehicle, daysUntil);
+                vehicle.LastServiceReminderAt = DateTime.UtcNow;
 
-                logger.LogInformation("Maintenance reminder sent: {Vehicle} — {Days} days",
-                    record.Vehicle.RegistrationNo, daysUntil);
+                logger.LogInformation("Service due reminder sent: {Vehicle} — {Days} days",
+                    vehicle.RegistrationNo, daysUntil);
             }
 
-            // Overdue
+            // ── Jobs left open too long ──────────────────────────────────────
+            // A record is overdue once it has been open past the grace period,
+            // not the day after it was raised. Without the grace period every
+            // open job would turn red immediately and the badge would stop
+            // meaning anything.
+            var cutoff = MaintenancePolicy.OverdueCutoff(today);
+
             var overdue = await db.MaintenanceRecords
                 .Include(m => m.Vehicle)
                 .Where(m => m.Status != "Completed" && m.Status != "Cancelled"
-                         && m.ScheduledDate < today)
+                         && m.ScheduledDate <= cutoff)
                 .ToListAsync(ct);
 
             foreach (var record in overdue)
@@ -101,7 +114,7 @@ public class MaintenanceReminderJob(
                 await notifications.SendMaintenanceOverdueAsync(record);
                 record.LastOverdueNoticeAt = DateTime.UtcNow;
 
-                logger.LogWarning("Overdue maintenance: {Vehicle} ({Type}) — was due {Date}",
+                logger.LogWarning("Overdue maintenance: {Vehicle} ({Type}) — reported {Date}, still open",
                     record.Vehicle.RegistrationNo, record.Type, record.ScheduledDate);
             }
 

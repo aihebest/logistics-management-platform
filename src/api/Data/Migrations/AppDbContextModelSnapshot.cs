@@ -178,6 +178,7 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<DateTime>("CreatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
                 b.Property<string>("FuelType").IsRequired().HasMaxLength(20).HasColumnType("nvarchar(20)").HasDefaultValue("Diesel");
                 b.Property<DateOnly?>("LastServiceDate").HasColumnType("date");
+                b.Property<DateTime?>("LastServiceReminderAt").HasColumnType("datetime2");
                 b.Property<string>("Make").IsRequired().HasMaxLength(50).HasColumnType("nvarchar(50)");
                 b.Property<string>("Model").IsRequired().HasMaxLength(50).HasColumnType("nvarchar(50)");
                 b.Property<DateOnly?>("NextServiceDate").HasColumnType("date");

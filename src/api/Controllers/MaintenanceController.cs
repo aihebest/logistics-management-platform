@@ -31,9 +31,12 @@ public class MaintenanceController(
             q = q.Where(m => m.Status == status);
         else
         {
-            // Auto-flag overdue
+            // Auto-flag jobs left open past the grace period. Keyed off the same
+            // policy the reminder job uses, so the badge on screen and the email
+            // that chases it can never disagree.
+            var cutoff = MaintenancePolicy.OverdueCutoff(today);
             var overdue = await db.MaintenanceRecords
-                .Where(m => m.Status == "Scheduled" && m.ScheduledDate < today)
+                .Where(m => m.Status == "Scheduled" && m.ScheduledDate <= cutoff)
                 .ToListAsync();
             overdue.ForEach(m => m.Status = "Overdue");
             if (overdue.Any()) await db.SaveChangesAsync();

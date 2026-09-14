@@ -15,6 +15,12 @@ public class Vehicle
     public int ServiceIntervalKm { get; set; } = 10000;
     public DateOnly? LastServiceDate { get; set; }
     public DateOnly? NextServiceDate { get; set; }
+    /// <summary>
+    /// When the last "service due" reminder went out for this vehicle. Stops the
+    /// job mailing the maintenance distribution list twice in a day if it runs
+    /// more than once — a repeat alert trains the team to ignore the alert.
+    /// </summary>
+    public DateTime? LastServiceReminderAt { get; set; }
     public Guid? AssignedMechanicId { get; set; }
     /// <summary>
     /// Fixed-asset tag from the company asset register (e.g. "5550000190").

@@ -27,7 +27,7 @@ public interface INotificationService
     Task SendMaterialDispatchedAsync(MaterialTransportRequest request);
 
     // ── Maintenance ─────────────────────────────────────────────────────────────
-    Task SendMaintenanceDueAsync(MaintenanceRecord record, int daysUntilDue);
+    Task SendVehicleServiceDueAsync(Vehicle vehicle, int daysUntilDue);
     Task SendMaintenanceOverdueAsync(MaintenanceRecord record);
     Task SendEmergencyMaintenanceLoggedAsync(MaintenanceRecord record);
     Task SendMaintenanceCompletedAsync(MaintenanceRecord record);
@@ -289,50 +289,65 @@ public class NotificationService(
     // MAINTENANCE NOTIFICATIONS — send to managers, NOT the from address
     // ═══════════════════════════════════════════════════════════════════════════
 
-    public async Task SendMaintenanceDueAsync(MaintenanceRecord record, int daysUntilDue)
+    /// <summary>
+    /// A vehicle is approaching its next scheduled service.
+    ///
+    /// Driven by the vehicle's own NextServiceDate, which is set when a service
+    /// completes — not by a maintenance record. Maintenance records now carry the
+    /// date a fault was *reported*, which is always in the past and so can never
+    /// tell anyone what is coming up.
+    /// </summary>
+    public async Task SendVehicleServiceDueAsync(Vehicle vehicle, int daysUntilDue)
     {
-        var vehicle = record.Vehicle;
-        var subject = $"Maintenance Due in {daysUntilDue} day{(daysUntilDue == 1 ? "" : "s")} — {vehicle.RegistrationNo}";
+        var whenText = daysUntilDue == 0
+            ? "due today"
+            : $"due in {daysUntilDue} day{(daysUntilDue == 1 ? "" : "s")}";
+
+        var subject = $"Service {whenText} — {vehicle.RegistrationNo}";
         var body    = $"""
-            Maintenance Reminder — Action Required
+            Service Reminder — Action Required
 
             Vehicle:        {vehicle.Make} {vehicle.Model} ({vehicle.RegistrationNo})
-            Service Type:   {record.Type}
-            Scheduled Date: {record.ScheduledDate:D}
+            Next Service:   {vehicle.NextServiceDate:D}
             Days Until Due: {daysUntilDue}
-            Vendor:         {record.VendorName ?? "Not specified"}
-            Notes:          {record.Notes ?? "None"}
+            Last Service:   {(vehicle.LastServiceDate.HasValue ? vehicle.LastServiceDate.Value.ToString("D") : "Not recorded")}
+            Odometer:       {vehicle.OdometerKm:N0} km
+            Service Every:  {vehicle.ServiceIntervalKm:N0} km
 
-            Please arrange for this vehicle to be taken in for service before the scheduled date.
+            Please arrange for this vehicle to be taken in for service before the due date.
 
             {PlatformUrl()}
             """;
 
         await SendToMaintenanceTeamAsync(subject, body);
-        logger.LogInformation("Maintenance due reminder sent: {Vehicle} — {Days} days", vehicle.RegistrationNo, daysUntilDue);
+        logger.LogInformation("Service due reminder sent: {Vehicle} — {Days} days", vehicle.RegistrationNo, daysUntilDue);
     }
 
     public async Task SendMaintenanceOverdueAsync(MaintenanceRecord record)
     {
         var vehicle   = record.Vehicle;
-        var daysOver  = DateOnly.FromDateTime(DateTime.UtcNow).DayNumber - record.ScheduledDate.DayNumber;
-        var subject   = $"OVERDUE Maintenance — {vehicle.RegistrationNo} ({daysOver} days overdue)";
+        // Days the job has been open since it was reported — the record's date
+        // column now means "reported on", not "scheduled for".
+        var daysOpen  = DateOnly.FromDateTime(DateTime.UtcNow).DayNumber - record.ScheduledDate.DayNumber;
+        var subject   = $"OVERDUE Maintenance — {vehicle.RegistrationNo} (open {daysOpen} days)";
         var body      = $"""
             ⚠️ OVERDUE MAINTENANCE ALERT — Immediate Action Required
 
             Vehicle:        {vehicle.Make} {vehicle.Model} ({vehicle.RegistrationNo})
             Service Type:   {record.Type}
-            Was Scheduled:  {record.ScheduledDate:D}
-            Days Overdue:   {daysOver}
+            Date Reported:  {record.ScheduledDate:D}
+            Days Open:      {daysOpen}
+            Status:         {record.Status}
             Vendor:         {record.VendorName ?? "Not specified"}
 
-            This vehicle may not be fit for continued service. Please arrange maintenance immediately and update the record in the platform.
+            This job has been open for more than {MaintenancePolicy.OverdueGraceDays} days. The vehicle may not be fit for
+            continued service. Please chase the workshop and update the record in the platform.
 
             {PlatformUrl()}
             """;
 
         await SendToMaintenanceTeamAsync(subject, body);
-        logger.LogWarning("Overdue maintenance alert sent: {Vehicle} — {Days} days overdue", vehicle.RegistrationNo, daysOver);
+        logger.LogWarning("Overdue maintenance alert sent: {Vehicle} — open {Days} days", vehicle.RegistrationNo, daysOpen);
     }
 
     /// <summary>
