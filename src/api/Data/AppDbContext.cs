@@ -108,6 +108,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
             // Repair cost in NGN — pinned so large amounts aren't silently truncated.
             e.Property(x => x.Cost).HasColumnType("decimal(14,2)");
+            // General Service platform link. Indexed because every inbound status
+            // push from GenService looks the record up by their request id.
+            e.Property(x => x.GenServiceRequestNumber).HasMaxLength(40);
+            e.Property(x => x.GenServiceStatus).HasMaxLength(40);
+            e.Property(x => x.GenServiceFaultIdentified).HasMaxLength(2000);
+            e.Property(x => x.GenServiceWorkDone).HasMaxLength(2000);
+            e.Property(x => x.GenServiceWorkshopName).HasMaxLength(200);
+            e.Property(x => x.SourceSystem).HasMaxLength(20).HasDefaultValue("Logistics");
+            e.HasIndex(x => x.GenServiceRequestId);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
             e.Property(x => x.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
             e.HasOne(x => x.Vehicle)

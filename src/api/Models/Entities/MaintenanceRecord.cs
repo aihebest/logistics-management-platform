@@ -29,6 +29,43 @@ public class MaintenanceRecord
     public string Status { get; set; } = "Scheduled";         // Scheduled | InProgress | Completed | Overdue | Cancelled
     public decimal? Cost { get; set; }
     public string? AttachmentBlobUrl { get; set; }
+
+    // ── General Service link ──────────────────────────────────────────────────
+    // Vehicles are ours, but the repair is carried out by the General Service
+    // department on their own platform (genservice.desiconapp.com). When we
+    // report a fault it is raised there automatically, and every status change
+    // they make is pushed back onto this record. These columns are the
+    // cross-reference plus the last thing they told us.
+
+    /// <summary>Id of the matching Vehicle Maintenance Request in GenService.</summary>
+    public Guid? GenServiceRequestId { get; set; }
+
+    /// <summary>GenService reference, e.g. "V/26/022" — what the workshop quotes on the phone.</summary>
+    public string? GenServiceRequestNumber { get; set; }
+
+    /// <summary>
+    /// GenService's own status word, kept verbatim alongside our mapped Status.
+    /// Their vocabulary is finer than ours — "AwaitingParts" and "AwaitingFunds"
+    /// both map to our "InProgress", and the difference is exactly what a
+    /// coordinator chasing a vehicle needs to know.
+    /// </summary>
+    public string? GenServiceStatus { get; set; }
+
+    /// <summary>Fault the GenService workshop actually found, as opposed to what was reported.</summary>
+    public string? GenServiceFaultIdentified { get; set; }
+
+    /// <summary>Work GenService carried out.</summary>
+    public string? GenServiceWorkDone { get; set; }
+
+    /// <summary>Where the vehicle physically is, when GenService has sent it out.</summary>
+    public string? GenServiceWorkshopName { get; set; }
+
+    /// <summary>When GenService last pushed an update onto this record.</summary>
+    public DateTime? GenServiceSyncedAt { get; set; }
+
+    /// <summary>Where this record started life: Logistics (here) or GenService.</summary>
+    public string SourceSystem { get; set; } = "Logistics";
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

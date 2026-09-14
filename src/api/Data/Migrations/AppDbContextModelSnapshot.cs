@@ -96,8 +96,18 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<DateOnly?>("DateReturned").HasColumnType("date");
                 b.Property<string>("VendorName").HasMaxLength(100).HasColumnType("nvarchar(100)");
                 b.Property<Guid>("VehicleId").HasColumnType("uniqueidentifier");
+                // General Service platform link
+                b.Property<Guid?>("GenServiceRequestId").HasColumnType("uniqueidentifier");
+                b.Property<string>("GenServiceRequestNumber").HasMaxLength(40).HasColumnType("nvarchar(40)");
+                b.Property<string>("GenServiceStatus").HasMaxLength(40).HasColumnType("nvarchar(40)");
+                b.Property<string>("GenServiceFaultIdentified").HasMaxLength(2000).HasColumnType("nvarchar(2000)");
+                b.Property<string>("GenServiceWorkDone").HasMaxLength(2000).HasColumnType("nvarchar(2000)");
+                b.Property<string>("GenServiceWorkshopName").HasMaxLength(200).HasColumnType("nvarchar(200)");
+                b.Property<DateTime?>("GenServiceSyncedAt").HasColumnType("datetime2");
+                b.Property<string>("SourceSystem").IsRequired().HasMaxLength(20).HasColumnType("nvarchar(20)").HasDefaultValue("Logistics");
                 b.HasKey("Id");
                 b.HasIndex("VehicleId");
+                b.HasIndex("GenServiceRequestId");
                 b.ToTable("MaintenanceRecords");
             });
 

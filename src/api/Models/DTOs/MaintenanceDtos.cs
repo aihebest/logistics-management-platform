@@ -22,7 +22,20 @@ public record MaintenanceRecordDto(
     DateOnly? DateReported,
     string? PartsReplaced,
     string? RepairRemarks,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    // ── General Service link ─────────────────────────────────────────────────
+    /// <summary>Their reference, e.g. "V/26/022" — what the workshop quotes on the phone.</summary>
+    string?   GenServiceRequestNumber = null,
+    /// <summary>Their status verbatim: Pending, Approved, InWorkshop, AwaitingParts, AwaitingFunds, Completed, Rejected.</summary>
+    string?   GenServiceStatus = null,
+    /// <summary>Plain-English rendering of the above, for the coordinator's screen.</summary>
+    string?   GenServiceStatusLabel = null,
+    string?   GenServiceFaultIdentified = null,
+    string?   GenServiceWorkDone = null,
+    string?   GenServiceWorkshopName = null,
+    DateTime? GenServiceSyncedAt = null,
+    /// <summary>"Logistics" if raised here, "GenService" if it started on their platform.</summary>
+    string?   SourceSystem = null
 );
 
 public record CreateMaintenanceRecordDto(

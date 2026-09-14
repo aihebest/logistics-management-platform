@@ -48,12 +48,44 @@ builder.Services.AddCors(opts =>
 // ── Rate Limiting ─────────────────────────────────────────────────────────────
 builder.Services.AddRateLimiter(opts =>
 {
-    opts.AddFixedWindowLimiter("api", o =>
+    // Partitioned rather than one global bucket, for two reasons:
+    //  • Machine-to-machine traffic from the General Service platform must not
+    //    be throttled into failed syncs by whatever our users happen to be doing
+    //    — a burst of status pushes is normal and expected.
+    //  • Equally, that traffic must not consume the allowance our users need.
+    // Applied as the "api" policy because MapControllers().RequireRateLimiting()
+    // below sets the policy for every endpoint; an [EnableRateLimiting] attribute
+    // on a controller would be overridden by it.
+    opts.AddPolicy("api", http =>
     {
-        o.PermitLimit = 60;
-        o.Window = TimeSpan.FromMinutes(1);
-        o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        o.QueueLimit = 10;
+        var isIntegration = http.Request.Path
+            .StartsWithSegments("/api/integration", StringComparison.OrdinalIgnoreCase);
+
+        if (isIntegration)
+            return RateLimitPartition.GetFixedWindowLimiter("integration", _ =>
+                new FixedWindowRateLimiterOptions
+                {
+                    // Generous, but still a ceiling: the shared-key check runs
+                    // after the limiter, so an unauthenticated caller reaches here.
+                    PermitLimit = 600,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 50,
+                });
+
+        // One bucket per signed-in user, falling back to remote IP.
+        var key = http.User?.Identity?.IsAuthenticated == true
+            ? http.User.Identity!.Name ?? "authenticated"
+            : http.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ =>
+            new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 10,
+            });
     });
     opts.RejectionStatusCode = 429;
 });
@@ -81,6 +113,14 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IStorageService, StorageService>();
 builder.Services.AddScoped<IReportingService, ReportingService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+
+// ── General Service platform integration ──────────────────────────────────────
+// Vehicle faults logged here are raised with the General Service department
+// (genservice.desiconapp.com), who carry out the repair and push status back.
+// Base URL and API key come from configuration — never committed to the repo.
+// With nothing configured the service no-ops, so local and Docker runs are fine.
+builder.Services.AddHttpClient(GenServiceSyncService.HttpClientName);
+builder.Services.AddScoped<IGenServiceSyncService, GenServiceSyncService>();
 
 // ── Background Jobs ───────────────────────────────────────────────────────────
 builder.Services.AddHostedService<MaintenanceReminderJob>();

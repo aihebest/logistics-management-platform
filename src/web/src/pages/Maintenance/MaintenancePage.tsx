@@ -62,6 +62,19 @@ export default function MaintenancePage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['maintenance'] }); toast.success('Record updated') },
   })
 
+  // Re-send a vehicle to General Service when the original hand-off didn't land.
+  const resendToGenService = useMutation({
+    mutationFn: (id: string) => maintenanceApi.resendToGenService(id),
+    onSuccess: rec => {
+      qc.invalidateQueries({ queryKey: ['maintenance'] })
+      toast.success(rec.genServiceRequestNumber
+        ? `Sent to General Service — ref ${rec.genServiceRequestNumber}`
+        : 'Sent to General Service')
+    },
+    onError: err => toast.error(
+      apiErrorMessage(err, 'General Service did not accept the record'), { duration: 6000 }),
+  })
+
   const sendNotification = useMutation({
     mutationFn: (payload: { title: string; message: string; type: string }) =>
       notificationsApi.broadcast(payload),
@@ -237,6 +250,36 @@ export default function MaintenancePage() {
                   {r.vendorName && ` · ${r.vendorName}`}
                   {r.cost != null && ` · ₦${r.cost.toLocaleString()}`}
                 </p>
+
+                {/* ── General Service feedback ───────────────────────────────
+                    The vehicle is ours but the repair is theirs, so this block
+                    is the answer to "where is my vehicle?" without a phone call. */}
+                {r.genServiceRequestNumber ? (
+                  <div className="mt-2 rounded-md bg-blue-50 border border-blue-200 px-3 py-2">
+                    <p className="text-xs font-semibold text-blue-900">
+                      General Service · {r.genServiceRequestNumber}
+                      {r.genServiceStatusLabel && <span className="font-normal"> — {r.genServiceStatusLabel}</span>}
+                    </p>
+                    {r.genServiceWorkshopName && (
+                      <p className="text-xs text-blue-800 mt-0.5">Workshop: {r.genServiceWorkshopName}</p>
+                    )}
+                    {r.genServiceFaultIdentified && (
+                      <p className="text-xs text-blue-800 mt-0.5">Fault found: {r.genServiceFaultIdentified}</p>
+                    )}
+                    {r.genServiceWorkDone && (
+                      <p className="text-xs text-blue-800 mt-0.5">Work done: {r.genServiceWorkDone}</p>
+                    )}
+                    {r.genServiceSyncedAt && (
+                      <p className="text-[11px] text-blue-500 mt-1">
+                        Updated {new Date(r.genServiceSyncedAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-amber-700">
+                    Not yet with General Service — they cannot see this vehicle.
+                  </p>
+                )}
               </div>
               <div className="flex flex-col gap-2 items-end">
                 {/* Notify Departments button */}
@@ -246,6 +289,15 @@ export default function MaintenancePage() {
                 >
                   🔔 Notify Departments
                 </button>
+                {!r.genServiceRequestNumber && (
+                  <button
+                    className="btn-secondary text-xs"
+                    onClick={() => resendToGenService.mutate(r.id)}
+                    disabled={resendToGenService.isPending}
+                  >
+                    Send to General Service
+                  </button>
+                )}
                 {(r.status === 'Scheduled' || r.status === 'InProgress' || r.status === 'Overdue') && (
                   <button
                     className="btn-secondary text-xs"

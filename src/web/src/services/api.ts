@@ -191,6 +191,21 @@ export interface MaintenanceRecord {
   partsReplaced?: string
   repairRemarks?: string
   createdAt: string
+  // ── General Service link ───────────────────────────────────────────────────
+  // The repair itself is carried out by the General Service department on their
+  // own platform; these fields are their latest update on our vehicle.
+  /** Their reference, e.g. "V/26/022" — what the workshop quotes on the phone. */
+  genServiceRequestNumber?: string
+  /** Their status verbatim: Pending | Approved | InWorkshop | AwaitingParts | AwaitingFunds | Completed | Rejected */
+  genServiceStatus?: string
+  /** Plain-English rendering of the above. */
+  genServiceStatusLabel?: string
+  genServiceFaultIdentified?: string
+  genServiceWorkDone?: string
+  genServiceWorkshopName?: string
+  genServiceSyncedAt?: string
+  /** 'Logistics' if raised here, 'GenService' if it started on their platform. */
+  sourceSystem?: string
 }
 
 export interface FuelLog {
@@ -537,6 +552,12 @@ export const maintenanceApi = {
   update: (id: string, data: object) => api.put(`/maintenance/${id}`, data),
   getVehicleHistory: (vehicleId: string) =>
     api.get<MaintenanceRecord[]>(`/maintenance/vehicle/${vehicleId}/history`).then(r => r.data),
+  /**
+   * Re-send a record to the General Service department — for when the hand-off
+   * failed at the time (their API was down, or the vehicle wasn't registered).
+   */
+  resendToGenService: (id: string) =>
+    api.post<MaintenanceRecord>(`/maintenance/${id}/resend-to-genservice`).then(r => r.data),
 }
 
 export const fuelApi = {

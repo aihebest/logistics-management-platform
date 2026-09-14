@@ -10,7 +10,11 @@ namespace LogisticsApi.Controllers;
 [ApiController]
 [Route("api/maintenance")]
 [Authorize]
-public class MaintenanceController(AppDbContext db, INotificationService notifications) : ControllerBase
+public class MaintenanceController(
+    AppDbContext db,
+    INotificationService notifications,
+    IGenServiceSyncService genService,
+    ILogger<MaintenanceController> logger) : ControllerBase
 {
     [HttpGet]
     [Authorize(Roles = "Coordinator,Manager,Mechanic,Admin")]
@@ -41,7 +45,11 @@ public class MaintenanceController(AppDbContext db, INotificationService notific
         if (!string.IsNullOrEmpty(category))
             q = q.Where(m => m.Category == category);
 
-        return await q.OrderBy(m => m.ScheduledDate).Select(m => ToDto(m)).ToListAsync();
+        // Materialise before projecting: ToDto is a plain C# method (it now also
+        // formats the General Service status label), so it must run client-side
+        // rather than being handed to the query translator.
+        var rows = await q.OrderBy(m => m.ScheduledDate).ToListAsync();
+        return rows.Select(ToDto).ToList();
     }
 
     [HttpGet("{id:guid}")]
@@ -56,12 +64,39 @@ public class MaintenanceController(AppDbContext db, INotificationService notific
     [Authorize(Roles = "Coordinator,Manager,Mechanic,Admin")]
     public async Task<IEnumerable<MaintenanceRecordDto>> GetHistory(Guid vehicleId)
     {
-        return await db.MaintenanceRecords
+        var rows = await db.MaintenanceRecords
             .Include(m => m.Vehicle)
             .Where(m => m.VehicleId == vehicleId)
             .OrderByDescending(m => m.ScheduledDate)
-            .Select(m => ToDto(m))
             .ToListAsync();
+        return rows.Select(ToDto).ToList();
+    }
+
+    /// <summary>
+    /// Re-send a record to General Service — for when the hand-off failed at the
+    /// time (their API was down, or the vehicle wasn't in their register yet).
+    /// Safe to call repeatedly: already-linked records are returned unchanged.
+    /// </summary>
+    [HttpPost("{id:guid}/resend-to-genservice")]
+    [Authorize(Roles = "Coordinator,Manager,Mechanic,Admin")]
+    public async Task<ActionResult<MaintenanceRecordDto>> ResendToGenService(Guid id)
+    {
+        var record = await db.MaintenanceRecords
+            .Include(m => m.Vehicle)
+            .FirstOrDefaultAsync(m => m.Id == id);
+        if (record == null) return NotFound();
+
+        if (!genService.IsConfigured)
+            return StatusCode(503, new { error = "The General Service link is not configured on this server." });
+
+        var reference = await genService.RaiseMaintenanceRequestAsync(record, HttpContext.RequestAborted);
+        if (reference is null && record.GenServiceRequestNumber is null)
+            return StatusCode(502, new
+            {
+                error = "General Service did not accept the record. Check the vehicle is in their register, then try again."
+            });
+
+        return Ok(ToDto(record));
     }
 
     [HttpPost]
@@ -107,6 +142,22 @@ public class MaintenanceController(AppDbContext db, INotificationService notific
         {
             try { await notifications.SendEmergencyMaintenanceLoggedAsync(record); }
             catch { /* email failure must not block record creation */ }
+        }
+
+        // Send the vehicle to General Service, who actually carry out the repair.
+        // Their reference comes back onto the record; from then on every status
+        // change they make is pushed to us. A failure here is not fatal — the
+        // record stands and can be re-sent.
+        try
+        {
+            var reference = await genService.RaiseMaintenanceRequestAsync(record, HttpContext.RequestAborted);
+            if (reference is null && genService.IsConfigured)
+                logger.LogWarning("Maintenance {Id} was not raised with General Service — retry from the record.",
+                    record.Id);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "General Service hand-off threw for {Id} — record kept.", record.Id);
         }
 
         return CreatedAtAction(nameof(Get), new { id = record.Id }, ToDto(record));
@@ -175,5 +226,13 @@ public class MaintenanceController(AppDbContext db, INotificationService notific
         m.Status, m.AttachmentBlobUrl,
         m.FaultReported, m.FaultDescription, m.DateReported,
         m.PartsReplaced, m.RepairRemarks,
-        m.CreatedAt);
+        m.CreatedAt,
+        m.GenServiceRequestNumber,
+        m.GenServiceStatus,
+        m.GenServiceStatus is null ? null : GenServiceStatusMap.Explain(m.GenServiceStatus),
+        m.GenServiceFaultIdentified,
+        m.GenServiceWorkDone,
+        m.GenServiceWorkshopName,
+        m.GenServiceSyncedAt,
+        m.SourceSystem);
 }
