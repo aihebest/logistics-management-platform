@@ -87,14 +87,18 @@ public class MaintenanceController(
         if (record == null) return NotFound();
 
         if (!genService.IsConfigured)
-            return StatusCode(503, new { error = "The General Service link is not configured on this server." });
-
-        var reference = await genService.RaiseMaintenanceRequestAsync(record, HttpContext.RequestAborted);
-        if (reference is null && record.GenServiceRequestNumber is null)
-            return StatusCode(502, new
+            return StatusCode(503, new
             {
-                error = "General Service did not accept the record. Check the vehicle is in their register, then try again."
+                error = "The General Service link is not configured on this server "
+                      + "(Integration__GenService__BaseUrl / __ApiKey)."
             });
+
+        var handoff = await genService.RaiseMaintenanceRequestAsync(record, HttpContext.RequestAborted);
+
+        // Surface the real reason rather than a generic failure — the remedy for a
+        // wrong URL, a wrong key and an unconfigured server are entirely different.
+        if (!handoff.Success && record.GenServiceRequestNumber is null)
+            return StatusCode(502, new { error = handoff.Error ?? "General Service did not accept the record." });
 
         return Ok(ToDto(record));
     }
@@ -150,10 +154,10 @@ public class MaintenanceController(
         // record stands and can be re-sent.
         try
         {
-            var reference = await genService.RaiseMaintenanceRequestAsync(record, HttpContext.RequestAborted);
-            if (reference is null && genService.IsConfigured)
-                logger.LogWarning("Maintenance {Id} was not raised with General Service — retry from the record.",
-                    record.Id);
+            var handoff = await genService.RaiseMaintenanceRequestAsync(record, HttpContext.RequestAborted);
+            if (!handoff.Success && genService.IsConfigured)
+                logger.LogWarning("Maintenance {Id} was not raised with General Service: {Reason}",
+                    record.Id, handoff.Error);
         }
         catch (Exception ex)
         {

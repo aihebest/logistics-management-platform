@@ -7,16 +7,27 @@ using LogisticsApi.Models.Entities;
 
 namespace LogisticsApi.Services;
 
+/// <summary>
+/// Outcome of handing a vehicle over to General Service. Carries the reason on
+/// failure so the user sees what actually went wrong rather than a guess — the
+/// difference between a wrong URL, a wrong key and an unconfigured server is the
+/// whole diagnosis, and it should not require reading Azure log streams.
+/// </summary>
+public record GenServiceHandoff(bool Success, string? Reference, string? Error)
+{
+    public static GenServiceHandoff Ok(string reference)  => new(true,  reference, null);
+    public static GenServiceHandoff Fail(string error)    => new(false, null,      error);
+}
+
 public interface IGenServiceSyncService
 {
     bool IsConfigured { get; }
 
     /// <summary>
-    /// Report a vehicle to the General Service department for repair. Returns the
-    /// GenService reference (e.g. "V/26/023") if it was raised, null otherwise.
-    /// Never throws.
+    /// Report a vehicle to the General Service department for repair. Never throws —
+    /// failures come back as <see cref="GenServiceHandoff.Error"/>.
     /// </summary>
-    Task<string?> RaiseMaintenanceRequestAsync(MaintenanceRecord record, CancellationToken ct = default);
+    Task<GenServiceHandoff> RaiseMaintenanceRequestAsync(MaintenanceRecord record, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -46,24 +57,26 @@ public class GenServiceSyncService(
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public async Task<string?> RaiseMaintenanceRequestAsync(MaintenanceRecord record, CancellationToken ct = default)
+    public async Task<GenServiceHandoff> RaiseMaintenanceRequestAsync(MaintenanceRecord record, CancellationToken ct = default)
     {
         if (!IsConfigured)
         {
             logger.LogDebug("General Service sync skipped for {Id} — integration not configured.", record.Id);
-            return null;
+            return GenServiceHandoff.Fail(
+                "The link to General Service is not configured on this server "
+                + "(Integration__GenService__BaseUrl / __ApiKey).");
         }
 
         // Anything that originated on their side is already in their register.
         if (record.SourceSystem == "GenService" || record.GenServiceRequestId.HasValue)
-            return record.GenServiceRequestNumber;
+            return GenServiceHandoff.Ok(record.GenServiceRequestNumber ?? "");
 
         var vehicle = record.Vehicle ?? await db.Vehicles.FindAsync([record.VehicleId], ct);
         if (vehicle is null)
         {
             logger.LogWarning("Cannot raise {Id} with General Service — vehicle {VehicleId} not found.",
                 record.Id, record.VehicleId);
-            return null;
+            return GenServiceHandoff.Fail("This record's vehicle is missing from the fleet register.");
         }
 
         var payload = new LogisticsVehicleRequestDto(
@@ -102,11 +115,27 @@ public class GenServiceSyncService(
                 var body = await res.Content.ReadAsStringAsync(ct);
                 logger.LogWarning("General Service rejected {Id}: HTTP {Code} {Body}",
                     record.Id, (int)res.StatusCode, Truncate(body, 400));
-                return null;
+
+                // Translate the status into the actual fix. These three are the
+                // only realistic failures once both sides are deployed, and they
+                // have completely different remedies.
+                return GenServiceHandoff.Fail((int)res.StatusCode switch
+                {
+                    503 => "General Service received the request but has no integration key configured. "
+                         + "Set Integration__InboundKey on the genservice-desicon app service.",
+                    401 => "General Service rejected our key. Integration__GenService__ApiKey here must match "
+                         + "Integration__InboundKey on the genservice-desicon app service.",
+                    404 => "General Service returned 404 — Integration__GenService__BaseUrl is pointing at the "
+                         + "wrong address. It must be the API app service URL, not the public website.",
+                    _   => $"General Service returned HTTP {(int)res.StatusCode}. {Truncate(body, 200)}",
+                });
             }
 
             var ack = await res.Content.ReadFromJsonAsync<GenServiceRequestAck>(Json, ct);
-            if (ack is null) return null;
+            if (ack is null)
+                return GenServiceHandoff.Fail(
+                    "General Service returned a response we could not read. Check that "
+                    + "Integration__GenService__BaseUrl points at the API app service, not the public website.");
 
             record.GenServiceRequestId     = ack.RequestId;
             record.GenServiceRequestNumber = ack.RequestNumber;
@@ -117,12 +146,13 @@ public class GenServiceSyncService(
 
             logger.LogInformation("Raised {Ref} with General Service for {Reg}.",
                 ack.RequestNumber, vehicle.RegistrationNo);
-            return ack.RequestNumber;
+            return GenServiceHandoff.Ok(ack.RequestNumber);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Could not raise {Id} with General Service.", record.Id);
-            return null;
+            return GenServiceHandoff.Fail(
+                $"Could not reach General Service. {Truncate(ex.Message, 200)}");
         }
     }
 
