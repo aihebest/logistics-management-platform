@@ -105,6 +105,9 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<string>("GenServiceWorkshopName").HasMaxLength(200).HasColumnType("nvarchar(200)");
                 b.Property<DateTime?>("GenServiceSyncedAt").HasColumnType("datetime2");
                 b.Property<string>("SourceSystem").IsRequired().HasMaxLength(20).HasColumnType("nvarchar(20)").HasDefaultValue("Logistics");
+                // Reminder de-duplication
+                b.Property<DateTime?>("LastReminderSentAt").HasColumnType("datetime2");
+                b.Property<DateTime?>("LastOverdueNoticeAt").HasColumnType("datetime2");
                 b.HasKey("Id");
                 b.HasIndex("VehicleId");
                 b.HasIndex("GenServiceRequestId");

@@ -66,6 +66,17 @@ public class MaintenanceRecord
     /// <summary>Where this record started life: Logistics (here) or GenService.</summary>
     public string SourceSystem { get; set; } = "Logistics";
 
+    // ── Reminder de-duplication ───────────────────────────────────────────────
+    // These stop the reminder job re-sending the same email on every pass. They
+    // are persisted rather than held in memory so a restart or a second instance
+    // can't start the mail over again.
+
+    /// <summary>When a "maintenance due" reminder was last emailed for this record.</summary>
+    public DateTime? LastReminderSentAt { get; set; }
+
+    /// <summary>When an "overdue" notice was last emailed for this record.</summary>
+    public DateTime? LastOverdueNoticeAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

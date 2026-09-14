@@ -8,20 +8,37 @@ public class MaintenanceReminderJob(
     IServiceScopeFactory scopeFactory,
     ILogger<MaintenanceReminderJob> logger) : BackgroundService
 {
-    // Run once per day at 07:00 UTC
+    /// <summary>
+    /// Runs once per day at 07:00 UTC, after a short warm-up on startup.
+    ///
+    /// The warm-up used to be selected by testing whether the delay to the next
+    /// run exceeded 23 hours. That is true for the whole window between midnight
+    /// and 07:00 UTC, not just on the first pass — so during those hours the job
+    /// looped every two minutes and re-sent every reminder each time. The flag
+    /// below says what was actually meant: warm up once, then sleep until 07:00.
+    /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var firstPass = true;
+
         while (!stoppingToken.IsCancellationRequested)
         {
-            var now = DateTime.UtcNow;
-            var nextRun = now.Date.AddDays(1).AddHours(7);
-            var delay = nextRun - now;
-
-            // First iteration: run after a short warm-up so the API is ready
-            if (delay > TimeSpan.FromHours(23))
-                await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
-            else
-                await Task.Delay(delay, stoppingToken);
+            try
+            {
+                if (firstPass)
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
+                    firstPass = false;
+                }
+                else
+                {
+                    var now  = DateTime.UtcNow;
+                    var next = now.Date.AddHours(7);
+                    if (next <= now) next = next.AddDays(1);
+                    await Task.Delay(next - now, stoppingToken);
+                }
+            }
+            catch (OperationCanceledException) { break; }
 
             if (stoppingToken.IsCancellationRequested) break;
 
@@ -50,12 +67,18 @@ public class MaintenanceReminderJob(
             foreach (var record in upcoming)
             {
                 var daysUntil = record.ScheduledDate.DayNumber - today.DayNumber;
-                if (checkpoints.Contains(daysUntil))
-                {
-                    await notifications.SendMaintenanceDueAsync(record, daysUntil);
-                    logger.LogInformation("Maintenance reminder sent: {Vehicle} — {Days} days",
-                        record.Vehicle.RegistrationNo, daysUntil);
-                }
+                if (!checkpoints.Contains(daysUntil)) continue;
+
+                // At most one reminder per record per day, whatever else happens.
+                // These go to a distribution list, so a repeat is not a harmless
+                // duplicate — it trains the team to ignore the alert entirely.
+                if (AlreadySentToday(record.LastReminderSentAt, today)) continue;
+
+                await notifications.SendMaintenanceDueAsync(record, daysUntil);
+                record.LastReminderSentAt = DateTime.UtcNow;
+
+                logger.LogInformation("Maintenance reminder sent: {Vehicle} — {Days} days",
+                    record.Vehicle.RegistrationNo, daysUntil);
             }
 
             // Overdue
@@ -67,8 +90,17 @@ public class MaintenanceReminderJob(
 
             foreach (var record in overdue)
             {
+                // Flag it regardless — the status is how the UI shows the problem.
                 record.Status = "Overdue";
+
+                // But chase by email only once a day. An overdue vehicle stays
+                // overdue for weeks; without this it would mail the team on
+                // every single pass for the whole period.
+                if (AlreadySentToday(record.LastOverdueNoticeAt, today)) continue;
+
                 await notifications.SendMaintenanceOverdueAsync(record);
+                record.LastOverdueNoticeAt = DateTime.UtcNow;
+
                 logger.LogWarning("Overdue maintenance: {Vehicle} ({Type}) — was due {Date}",
                     record.Vehicle.RegistrationNo, record.Type, record.ScheduledDate);
             }
@@ -80,4 +112,11 @@ public class MaintenanceReminderJob(
             logger.LogError(ex, "Maintenance reminder job failed");
         }
     }
+
+    /// <summary>
+    /// Has a notice already gone out for this record today? Compared on the UTC
+    /// calendar day, matching the day the job itself works in.
+    /// </summary>
+    private static bool AlreadySentToday(DateTime? lastSentAt, DateOnly today) =>
+        lastSentAt is DateTime t && DateOnly.FromDateTime(t) >= today;
 }
