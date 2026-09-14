@@ -220,12 +220,11 @@ export interface FuelLog {
   totalCost: number
   paymentMethod: string       // Card | Cash | Credit | Transfer
   isCashPayment: boolean      // legacy mirror of paymentMethod === 'Cash'
-  odometerAtFill: number
-  odometerFrom?: number
-  odometerTo?: number
-  mileageCovered?: number
-  fuelGaugeBefore?: number
-  fuelGaugeAfter?: number
+  odometerAtFill: number          // mileage before the purchase
+  odometerAfterFill?: number      // mileage after the purchase
+  mileageCovered?: number         // calculated: after − before
+  fuelGaugeBeforePosition?: string
+  fuelGaugeAfterPosition?: string
   costCentre?: string
   stationName?: string
   receiptBlobUrl?: string

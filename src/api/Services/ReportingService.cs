@@ -211,7 +211,8 @@ public class ReportingService(AppDbContext db) : IReportingService
         {
             "Date", "Vehicle Reg", "Make / Model", "Location", "Cost Centre",
             "Product", "Station", "Payment Method", "Litres", "Rate (NGN)",
-            "Total (NGN)", "Odometer", "Mileage Covered (km)", "Logged By", "Notes"
+            "Total (NGN)", "Mileage Before (km)", "Mileage After (km)",
+            "KM Covered", "Gauge Before", "Gauge After", "Logged By", "Notes"
         };
 
         const int headerRow = 5;
@@ -244,9 +245,12 @@ public class ReportingService(AppDbContext db) : IReportingService
             ws.Cell(row, 10).Value = (double)f.CostPerLitre;
             ws.Cell(row, 11).Value = (double)f.TotalCost;
             ws.Cell(row, 12).Value = f.OdometerAtFill;
-            if (f.MileageCovered.HasValue) ws.Cell(row, 13).Value = f.MileageCovered.Value;
-            ws.Cell(row, 14).Value = f.LoggedBy?.FullName ?? "";
-            ws.Cell(row, 15).Value = f.Notes ?? "";
+            if (f.OdometerAfterFill.HasValue) ws.Cell(row, 13).Value = f.OdometerAfterFill.Value;
+            if (f.MileageCovered.HasValue)    ws.Cell(row, 14).Value = f.MileageCovered.Value;
+            ws.Cell(row, 15).Value = f.FuelGaugeBeforePosition ?? "";
+            ws.Cell(row, 16).Value = f.FuelGaugeAfterPosition ?? "";
+            ws.Cell(row, 17).Value = f.LoggedBy?.FullName ?? "";
+            ws.Cell(row, 18).Value = f.Notes ?? "";
 
             ws.Cell(row, 9).Style.NumberFormat.Format  = "#,##0.00";
             ws.Cell(row, 10).Style.NumberFormat.Format = money;
@@ -261,10 +265,12 @@ public class ReportingService(AppDbContext db) : IReportingService
             var first = headerRow + 1;
             var last  = row - 1;
             ws.Cell(row, 8).Value = "TOTAL";
-            ws.Cell(row, 9).FormulaA1  = $"SUM(I{first}:I{last})";
-            ws.Cell(row, 11).FormulaA1 = $"SUM(K{first}:K{last})";
+            ws.Cell(row, 9).FormulaA1  = $"SUM(I{first}:I{last})";   // litres
+            ws.Cell(row, 11).FormulaA1 = $"SUM(K{first}:K{last})";   // cost
+            ws.Cell(row, 14).FormulaA1 = $"SUM(N{first}:N{last})";   // km covered
             ws.Cell(row, 9).Style.NumberFormat.Format  = "#,##0.00";
             ws.Cell(row, 11).Style.NumberFormat.Format = money;
+            ws.Cell(row, 14).Style.NumberFormat.Format = "#,##0";
             ws.Range(row, 1, row, headers.Length).Style.Font.Bold = true;
             ws.Range(row, 1, row, headers.Length).Style.Fill.BackgroundColor = XLColor.FromHtml("#DDEBF7");
 

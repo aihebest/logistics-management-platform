@@ -71,6 +71,9 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<Guid>("LoggedById").HasColumnType("uniqueidentifier");
                 b.Property<string>("Notes").HasMaxLength(500).HasColumnType("nvarchar(500)");
                 b.Property<int>("OdometerAtFill").HasColumnType("int");
+                b.Property<int?>("OdometerAfterFill").HasColumnType("int");
+                b.Property<string>("FuelGaugeBeforePosition").HasMaxLength(30).HasColumnType("nvarchar(30)");
+                b.Property<string>("FuelGaugeAfterPosition").HasMaxLength(30).HasColumnType("nvarchar(30)");
                 b.Property<string>("ReceiptBlobUrl").HasMaxLength(500).HasColumnType("nvarchar(500)");
                 b.Property<string>("StationName").HasMaxLength(100).HasColumnType("nvarchar(100)");
                 b.Property<decimal>("TotalCost").HasColumnType("decimal(14,2)");

@@ -79,12 +79,11 @@ public record FuelLogDto(
     decimal TotalCost,
     string PaymentMethod,     // Card | Cash | Credit | Transfer
     bool IsCashPayment,       // legacy mirror, kept so older clients keep working
-    int OdometerAtFill,
-    int? OdometerFrom,
-    int? OdometerTo,
-    int? MileageCovered,
-    decimal? FuelGaugeBefore,
-    decimal? FuelGaugeAfter,
+    int OdometerAtFill,          // mileage before the purchase
+    int? OdometerAfterFill,      // mileage after the purchase
+    int? MileageCovered,         // calculated: after − before
+    string? FuelGaugeBeforePosition,
+    string? FuelGaugeAfterPosition,
     string? CostCentre,
     string? StationName,
     string? ReceiptBlobUrl,
@@ -100,12 +99,11 @@ public record CreateFuelLogDto(
     string ProductType,
     decimal LitresFilled,
     decimal CostPerLitre,
-    int OdometerAtFill,
+    int OdometerAtFill,              // mileage before the purchase
     string PaymentMethod = "Card",   // Card | Cash | Credit | Transfer
-    int? OdometerFrom = null,
-    int? OdometerTo = null,
-    decimal? FuelGaugeBefore = null,
-    decimal? FuelGaugeAfter = null,
+    int? OdometerAfterFill = null,   // mileage after the purchase
+    string? FuelGaugeBeforePosition = null,
+    string? FuelGaugeAfterPosition = null,
     string? CostCentre = null,
     string? StationName = null,
     string? Notes = null,
@@ -122,11 +120,10 @@ public record UpdateFuelLogDto(
     string? ProductType = null,
     decimal? LitresFilled = null,
     decimal? CostPerLitre = null,
-    int? OdometerAtFill = null,
-    int? OdometerFrom = null,
-    int? OdometerTo = null,
-    decimal? FuelGaugeBefore = null,
-    decimal? FuelGaugeAfter = null,
+    int? OdometerAtFill = null,      // mileage before the purchase
+    int? OdometerAfterFill = null,   // mileage after the purchase
+    string? FuelGaugeBeforePosition = null,
+    string? FuelGaugeAfterPosition = null,
     string? PaymentMethod = null,    // Card | Cash | Credit | Transfer
     string? CostCentre = null,
     string? StationName = null,

@@ -13,6 +13,24 @@ const PRODUCT_TYPES = ['Petrol', 'Diesel']
 /** The four ways fuel gets paid for, confirmed by the Director of Logistics. */
 const PAYMENT_METHODS = ['Card', 'Cash', 'Credit', 'Transfer']
 
+/**
+ * Tank positions, lowest to highest, matching the wording on the logistics
+ * team's own fuel report. Drivers read a needle, not a percentage — asking for
+ * a number was inviting invented precision. Mirrors GaugePositions in
+ * FuelController; keep the two in step.
+ */
+const GAUGE_POSITIONS = [
+  'Reserve',
+  'Below 1/4 tank',
+  '1/4 tank',
+  'Below 1/2 tank',
+  '1/2 tank',
+  'Above 1/2 tank',
+  '3/4 tank',
+  'Above 3/4 tank',
+  'Full tank',
+]
+
 const PAYMENT_STYLES: Record<string, string> = {
   Card:     'bg-green-100 text-green-800',
   Cash:     'bg-yellow-100 text-yellow-800',
@@ -90,8 +108,10 @@ export default function FuelPage() {
         productType: str('productType'),
         litresFilled: num('litresFilled'),
         costPerLitre: num('costPerLitre'),
-        odometerFrom: num('odometerFrom'),
-        odometerTo: num('odometerTo'),
+        odometerAtFill: num('odometerAtFill'),
+        odometerAfterFill: num('odometerAfterFill'),
+        fuelGaugeBeforePosition: str('fuelGaugeBeforePosition'),
+        fuelGaugeAfterPosition: str('fuelGaugeAfterPosition'),
         stationName: str('stationName'),
         costCentre: str('costCentre'),
         paymentMethod: str('paymentMethod'),
@@ -133,8 +153,7 @@ export default function FuelPage() {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
-    const odomFrom = fd.get('odometerFrom') ? Number(fd.get('odometerFrom')) : undefined
-    const odomTo = fd.get('odometerTo') ? Number(fd.get('odometerTo')) : undefined
+    const after = fd.get('odometerAfterFill') ? Number(fd.get('odometerAfterFill')) : undefined
     createLog.mutate({
       vehicleId: fd.get('vehicleId') as string,
       fuelDate: fd.get('fuelDate') as string,
@@ -143,10 +162,10 @@ export default function FuelPage() {
       costPerLitre: Number(fd.get('costPerLitre')),
       odometerAtFill: Number(fd.get('odometerAtFill')),
       paymentMethod: fd.get('paymentMethod') as string || 'Card',
-      odometerFrom: odomFrom,
-      odometerTo: odomTo,
-      fuelGaugeBefore: fd.get('fuelGaugeBefore') ? Number(fd.get('fuelGaugeBefore')) : undefined,
-      fuelGaugeAfter: fd.get('fuelGaugeAfter') ? Number(fd.get('fuelGaugeAfter')) : undefined,
+      // KM covered is worked out by the server from these two readings.
+      odometerAfterFill: after,
+      fuelGaugeBeforePosition: fd.get('fuelGaugeBeforePosition') as string || undefined,
+      fuelGaugeAfterPosition: fd.get('fuelGaugeAfterPosition') as string || undefined,
       stationName: fd.get('stationName') as string || undefined,
       notes: fd.get('notes') as string || undefined,
       locationId: fd.get('locationId') as string || undefined,
@@ -213,9 +232,10 @@ export default function FuelPage() {
           {exporting ? 'Preparing…' : '⬇ Export to Excel'}
         </button>
         <p className="text-xs text-gray-500 flex-1 min-w-[220px]">
-          Three sheets — transaction detail, totals by payment method, and totals by
-          vehicle. Amounts and dates come through as real numbers and dates, so
-          accounts can filter and total without reformatting.
+          Three sheets — transaction detail (including mileage, KM covered and gauge
+          readings), totals by payment method, and totals by vehicle. Amounts and
+          dates come through as real numbers and dates, so accounts can filter and
+          total without reformatting.
           {(locationFilter || productFilter) && (
             <span className="block text-amber-700 mt-0.5">
               The location and product filters above will be applied to the file.
@@ -295,12 +315,30 @@ export default function FuelPage() {
             </div>
             <div><label className="label">Litres Filled</label><input name="litresFilled" type="number" step="0.01" className="input" required /></div>
             <div><label className="label">Cost per Litre (₦)</label><input name="costPerLitre" type="number" step="0.01" className="input" required /></div>
-            <div><label className="label">Mileage Before Fuel Purchase (km)</label><input name="odometerAtFill" type="number" className="input" required /></div>
-            <div><label className="label">Mileage From (km)</label><input name="odometerFrom" type="number" className="input" placeholder="Previous reading" /></div>
-            <div><label className="label">Mileage To (km)</label><input name="odometerTo" type="number" className="input" placeholder="Current reading" /></div>
-            <div><label className="label">Fuel Gauge Before (%)</label><input name="fuelGaugeBefore" type="number" min={0} max={100} className="input" /></div>
-            <div><label className="label">Fuel Gauge After (%)</label><input name="fuelGaugeAfter" type="number" min={0} max={100} className="input" /></div>
+            <div>
+              <label className="label">Mileage Before Fuel Purchase (km)</label>
+              <input name="odometerAtFill" type="number" min="0" className="input" required />
+            </div>
+            <div>
+              <label className="label">Mileage After Purchase (km)</label>
+              <input name="odometerAfterFill" type="number" min="0" className="input" placeholder="Leave blank until known" />
+              <p className="text-xs text-gray-500 mt-1">KM Covered is calculated from these two readings.</p>
+            </div>
             <div><label className="label">Station Name</label><input name="stationName" className="input" /></div>
+            <div>
+              <label className="label">Fuel Gauge Before</label>
+              <select name="fuelGaugeBeforePosition" className="input" defaultValue="">
+                <option value="">Not recorded</option>
+                {GAUGE_POSITIONS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Fuel Gauge After</label>
+              <select name="fuelGaugeAfterPosition" className="input" defaultValue="">
+                <option value="">Not recorded</option>
+                {GAUGE_POSITIONS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
             <div>
               <label className="label">Payment Option</label>
               <select name="paymentMethod" className="input" defaultValue="Card">
@@ -340,8 +378,28 @@ export default function FuelPage() {
             </div>
             <div><label className="label">Litres</label><input name="litresFilled" type="number" step="0.01" min="0" className="input" defaultValue={editing.litresFilled} /></div>
             <div><label className="label">Rate (₦/litre)</label><input name="costPerLitre" type="number" step="0.01" min="0" className="input" defaultValue={editing.costPerLitre} /></div>
-            <div><label className="label">Odometer From</label><input name="odometerFrom" type="number" min="0" className="input" defaultValue={editing.odometerFrom ?? ''} /></div>
-            <div><label className="label">Odometer To</label><input name="odometerTo" type="number" min="0" className="input" defaultValue={editing.odometerTo ?? ''} /></div>
+            <div>
+              <label className="label">Mileage Before (km)</label>
+              <input name="odometerAtFill" type="number" min="0" className="input" defaultValue={editing.odometerAtFill} />
+            </div>
+            <div>
+              <label className="label">Mileage After (km)</label>
+              <input name="odometerAfterFill" type="number" min="0" className="input" defaultValue={editing.odometerAfterFill ?? ''} />
+            </div>
+            <div>
+              <label className="label">Gauge Before</label>
+              <select name="fuelGaugeBeforePosition" className="input" defaultValue={editing.fuelGaugeBeforePosition ?? ''}>
+                <option value="">Not recorded</option>
+                {GAUGE_POSITIONS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Gauge After</label>
+              <select name="fuelGaugeAfterPosition" className="input" defaultValue={editing.fuelGaugeAfterPosition ?? ''}>
+                <option value="">Not recorded</option>
+                {GAUGE_POSITIONS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
             <div><label className="label">Station</label><input name="stationName" className="input" defaultValue={editing.stationName ?? ''} /></div>
             <div>
               <label className="label">Payment Option</label>
@@ -370,7 +428,9 @@ export default function FuelPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {['Date', 'Vehicle', 'Location', 'Product', 'Litres', 'Rate (₦)', 'Total (₦)', 'Mileage', 'Payment', 'Logged By', ''].map(h => (
+                {['Date', 'Vehicle', 'Location', 'Product', 'Litres', 'Rate (₦)', 'Total (₦)',
+                  'Mileage Before', 'Mileage After', 'KM Covered', 'Gauge Before', 'Gauge After',
+                  'Payment', 'Logged By', ''].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                 ))}
               </tr>
@@ -391,8 +451,21 @@ export default function FuelPage() {
                   <td className="px-3 py-3 text-sm text-gray-700">{l.litresFilled.toFixed(1)}L</td>
                   <td className="px-3 py-3 text-sm text-gray-700">₦{l.costPerLitre.toLocaleString()}</td>
                   <td className="px-3 py-3 text-sm font-medium text-gray-900">₦{l.totalCost.toLocaleString()}</td>
-                  <td className="px-3 py-3 text-sm text-gray-500">
-                    {l.mileageCovered != null ? `${l.mileageCovered.toLocaleString()} km` : l.odometerAtFill ? `${l.odometerAtFill.toLocaleString()} km` : '—'}
+                  <td className="px-3 py-3 text-sm text-gray-500 tabular-nums whitespace-nowrap">
+                    {l.odometerAtFill ? l.odometerAtFill.toLocaleString() : '—'}
+                  </td>
+                  <td className="px-3 py-3 text-sm text-gray-500 tabular-nums whitespace-nowrap">
+                    {l.odometerAfterFill != null ? l.odometerAfterFill.toLocaleString() : '—'}
+                  </td>
+                  {/* Calculated server-side: after − before */}
+                  <td className="px-3 py-3 text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
+                    {l.mileageCovered != null ? `${l.mileageCovered.toLocaleString()} km` : '—'}
+                  </td>
+                  <td className="px-3 py-3 text-sm text-gray-500 whitespace-nowrap">
+                    {l.fuelGaugeBeforePosition ?? '—'}
+                  </td>
+                  <td className="px-3 py-3 text-sm text-gray-500 whitespace-nowrap">
+                    {l.fuelGaugeAfterPosition ?? '—'}
                   </td>
                   <td className="px-3 py-3 text-sm">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
@@ -415,7 +488,7 @@ export default function FuelPage() {
                 </tr>
               ))}
               {logs.length === 0 && (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-gray-400">No fuel logs found</td></tr>
+                <tr><td colSpan={15} className="px-4 py-12 text-center text-gray-400">No fuel logs found</td></tr>
               )}
             </tbody>
           </table>

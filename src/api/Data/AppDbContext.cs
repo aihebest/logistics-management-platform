@@ -137,6 +137,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.FuelGaugeBefore).HasColumnType("decimal(5,2)");
             e.Property(x => x.FuelGaugeAfter).HasColumnType("decimal(5,2)");
             e.Property(x => x.PaymentMethod).HasMaxLength(20);
+            // Lengths mirror 20260914020000_FuelMileageAndGaugePosition.
+            e.Property(x => x.FuelGaugeBeforePosition).HasMaxLength(30);
+            e.Property(x => x.FuelGaugeAfterPosition).HasMaxLength(30);
             e.HasOne(x => x.Vehicle)
              .WithMany(v => v.FuelLogs)
              .HasForeignKey(x => x.VehicleId)

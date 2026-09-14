@@ -56,11 +56,24 @@ public class FuelController(
         if (dto.ProductType != null)      { Track("Product", log.ProductType, dto.ProductType);            log.ProductType = dto.ProductType; }
         if (dto.LitresFilled.HasValue)    { Track("Litres", log.LitresFilled, dto.LitresFilled.Value);     log.LitresFilled = dto.LitresFilled.Value; }
         if (dto.CostPerLitre.HasValue)    { Track("Rate", log.CostPerLitre, dto.CostPerLitre.Value);       log.CostPerLitre = dto.CostPerLitre.Value; }
-        if (dto.OdometerAtFill.HasValue)  { Track("Odometer", log.OdometerAtFill, dto.OdometerAtFill.Value); log.OdometerAtFill = dto.OdometerAtFill.Value; }
-        if (dto.OdometerFrom.HasValue)    { Track("Odometer From", log.OdometerFrom, dto.OdometerFrom);    log.OdometerFrom = dto.OdometerFrom; }
-        if (dto.OdometerTo.HasValue)      { Track("Odometer To", log.OdometerTo, dto.OdometerTo);          log.OdometerTo = dto.OdometerTo; }
-        if (dto.FuelGaugeBefore.HasValue) { Track("Gauge Before", log.FuelGaugeBefore, dto.FuelGaugeBefore); log.FuelGaugeBefore = dto.FuelGaugeBefore; }
-        if (dto.FuelGaugeAfter.HasValue)  { Track("Gauge After", log.FuelGaugeAfter, dto.FuelGaugeAfter);  log.FuelGaugeAfter = dto.FuelGaugeAfter; }
+        if (dto.OdometerAtFill.HasValue)    { Track("Mileage Before", log.OdometerAtFill, dto.OdometerAtFill.Value); log.OdometerAtFill = dto.OdometerAtFill.Value; }
+        if (dto.OdometerAfterFill.HasValue) { Track("Mileage After", log.OdometerAfterFill, dto.OdometerAfterFill); log.OdometerAfterFill = dto.OdometerAfterFill; }
+
+        // Sending an empty string clears the reading; sending something we don't
+        // recognise is a mistake worth reporting.
+        if (dto.FuelGaugeBeforePosition != null)
+        {
+            if (!TryReadGauge(dto.FuelGaugeBeforePosition, out var pos)) return BadRequest(GaugePositionError());
+            Track("Gauge Before", log.FuelGaugeBeforePosition, pos);
+            log.FuelGaugeBeforePosition = pos;
+        }
+
+        if (dto.FuelGaugeAfterPosition != null)
+        {
+            if (!TryReadGauge(dto.FuelGaugeAfterPosition, out var pos)) return BadRequest(GaugePositionError());
+            Track("Gauge After", log.FuelGaugeAfterPosition, pos);
+            log.FuelGaugeAfterPosition = pos;
+        }
         if (dto.PaymentMethod != null)
         {
             var method = NormalisePaymentMethod(dto.PaymentMethod);
@@ -86,8 +99,12 @@ public class FuelController(
             log.TotalCost = recalculatedTotal;
         }
 
-        if (log.OdometerFrom.HasValue && log.OdometerTo.HasValue && log.OdometerTo >= log.OdometerFrom)
-            log.MileageCovered = log.OdometerTo - log.OdometerFrom;
+        // KM covered is always derived, never accepted from the client. A lower
+        // "after" reading means one of the two was mistyped, so leave the
+        // distance blank rather than publishing a negative number.
+        log.MileageCovered = log.OdometerAfterFill.HasValue && log.OdometerAfterFill >= log.OdometerAtFill
+            ? log.OdometerAfterFill - log.OdometerAtFill
+            : null;
 
         await db.SaveChangesAsync();
 
@@ -138,11 +155,23 @@ public class FuelController(
         if (paymentMethod == null)
             return BadRequest(new { error = $"Payment method must be one of: {string.Join(", ", PaymentMethods)}." });
 
+        // Blank means "not recorded" and is allowed; only an unrecognised reading
+        // is an error.
+        var gaugeBefore = NormaliseGaugePosition(dto.FuelGaugeBeforePosition);
+        if (!string.IsNullOrWhiteSpace(dto.FuelGaugeBeforePosition) && gaugeBefore == null)
+            return BadRequest(GaugePositionError());
+
+        var gaugeAfter = NormaliseGaugePosition(dto.FuelGaugeAfterPosition);
+        if (!string.IsNullOrWhiteSpace(dto.FuelGaugeAfterPosition) && gaugeAfter == null)
+            return BadRequest(GaugePositionError());
+
         var totalCost = dto.LitresFilled * dto.CostPerLitre;
 
-        int? mileageCovered = null;
-        if (dto.OdometerTo.HasValue && dto.OdometerFrom.HasValue && dto.OdometerTo > dto.OdometerFrom)
-            mileageCovered = dto.OdometerTo.Value - dto.OdometerFrom.Value;
+        // KM covered is derived here, not sent by the client, so the column always
+        // agrees with the two readings beside it.
+        int? mileageCovered = dto.OdometerAfterFill.HasValue && dto.OdometerAfterFill >= dto.OdometerAtFill
+            ? dto.OdometerAfterFill.Value - dto.OdometerAtFill
+            : null;
 
         var log = new Models.Entities.FuelLog
         {
@@ -157,11 +186,10 @@ public class FuelController(
             PaymentMethod = paymentMethod,
             IsCashPayment = paymentMethod == "Cash",   // legacy flag kept in step
             OdometerAtFill = dto.OdometerAtFill,
-            OdometerFrom = dto.OdometerFrom,
-            OdometerTo = dto.OdometerTo,
+            OdometerAfterFill = dto.OdometerAfterFill,
             MileageCovered = mileageCovered,
-            FuelGaugeBefore = dto.FuelGaugeBefore,
-            FuelGaugeAfter = dto.FuelGaugeAfter,
+            FuelGaugeBeforePosition = gaugeBefore,
+            FuelGaugeAfterPosition = gaugeAfter,
             CostCentre = dto.CostCentre,
             StationName = dto.StationName,
             Notes = dto.Notes,
@@ -194,6 +222,61 @@ public class FuelController(
     private static readonly string[] PaymentMethods = ["Card", "Cash", "Credit", "Transfer"];
 
     /// <summary>
+    /// Tank positions, lowest to highest, in the wording the logistics team
+    /// already uses on their own fuel report. Order matters — the UI renders the
+    /// dropdown straight from this list, so it reads like a fuel gauge.
+    /// </summary>
+    private static readonly string[] GaugePositions =
+    [
+        "Reserve",
+        "Below 1/4 tank",
+        "1/4 tank",
+        "Below 1/2 tank",
+        "1/2 tank",
+        "Above 1/2 tank",
+        "3/4 tank",
+        "Above 3/4 tank",
+        "Full tank",
+    ];
+
+    /// <summary>
+    /// Accepts any casing and tolerates the spacing variations that appear in the
+    /// team's spreadsheet ("1/4  tank", "Below 1/4"). Returns the canonical value,
+    /// or null when the reading isn't one we recognise. Blank means "not recorded".
+    /// </summary>
+    private static string? NormaliseGaugePosition(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+
+        static string Key(string s) =>
+            string.Concat(s.Where(c => !char.IsWhiteSpace(c))).ToLowerInvariant();
+
+        var key = Key(value);
+
+        var exact = GaugePositions.FirstOrDefault(p => Key(p) == key);
+        if (exact != null) return exact;
+
+        // The spreadsheet writes "Below 1/4" without the trailing word.
+        return GaugePositions.FirstOrDefault(p => Key(p) == key + "tank");
+    }
+
+    /// <summary>
+    /// Reads a gauge value supplied on a correction. Blank clears the reading and
+    /// succeeds with null; an unrecognised value fails.
+    /// </summary>
+    private static bool TryReadGauge(string value, out string? position)
+    {
+        if (string.IsNullOrWhiteSpace(value)) { position = null; return true; }
+        position = NormaliseGaugePosition(value);
+        return position != null;
+    }
+
+    private static object GaugePositionError() => new
+    {
+        error = $"Fuel gauge reading must be one of: {string.Join(", ", GaugePositions)}."
+    };
+
+    /// <summary>
     /// Accepts any casing and returns the canonical value, or null when the value
     /// isn't one we recognise. Blank falls back to Card, which is the common case.
     /// </summary>
@@ -212,8 +295,10 @@ public class FuelController(
         string.IsNullOrWhiteSpace(f.PaymentMethod) ? (f.IsCashPayment ? "Cash" : "Card") : f.PaymentMethod,
         f.IsCashPayment,
         f.OdometerAtFill,
-        f.OdometerFrom, f.OdometerTo, f.MileageCovered,
-        f.FuelGaugeBefore, f.FuelGaugeAfter,
+        f.OdometerAfterFill,
+        f.MileageCovered,
+        f.FuelGaugeBeforePosition,
+        f.FuelGaugeAfterPosition,
         f.CostCentre, f.StationName, f.ReceiptBlobUrl, f.Notes,
         f.LocationId, f.Location?.Name,
         f.CreatedAt);
