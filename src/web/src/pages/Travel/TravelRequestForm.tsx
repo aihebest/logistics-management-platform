@@ -292,11 +292,19 @@ export default function TravelRequestForm({ request: r, onClose }: Props) {
                 at={r.formDate}
                 placeholder="Awaiting submission"
               />
+              {/* A head of department cannot verify their own travel, so those
+                  requests have no verification stage. Once such a request has
+                  moved past submission, say so plainly rather than leaving the
+                  box reading as an outstanding step. */}
               <SignatureBlock
                 name={r.verifiedByName}
                 at={r.verifiedAt}
                 notes={r.verificationNotes}
-                placeholder="Awaiting verification by Head of Department"
+                placeholder={
+                  r.status === 'PendingVerification'
+                    ? 'Awaiting verification by Head of Department'
+                    : 'Not required — raised by the Head of Department'
+                }
               />
               <SignatureBlock
                 name={r.approvedByName}

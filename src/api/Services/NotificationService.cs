@@ -414,13 +414,39 @@ public class NotificationService(
         logger.LogInformation("Travel request {Form} submitted notifications sent", request.FormNumber);
     }
 
-    /// <summary>Verified by the head of department — now waiting on the DMD/MD.</summary>
+    /// <summary>
+    /// Ready for the DMD/MD.
+    ///
+    /// Usually this follows verification by the head of department. It is also
+    /// sent straight after submission when the head of department is the person
+    /// travelling — they cannot verify their own request, so there is no
+    /// verification stage and management is the sole approver. The email says
+    /// which of the two it is, so the DMD knows what he is signing off.
+    /// </summary>
     public async Task SendTravelRequestVerifiedAsync(TravelRequest request)
     {
+        var skippedVerification = request.VerifiedById == null;
+
+        var opening = skippedVerification
+            ? $"""
+               A travel request needs your approval.
+
+               It was raised by the head of {request.Department}, who cannot verify their
+               own travel, so there is no head-of-department verification on this one and
+               your approval is the only sign-off.
+               """
+            : "A travel request has been verified by the head of department and needs\nmanagement approval.";
+
+        var verificationLines = skippedVerification
+            ? "Verified by: Not required — raised by the Head of Department"
+            : $"""
+               Verified by: {request.VerifiedBy?.FullName ?? "Head of Department"}
+               Verified on: {request.VerifiedAt:dd MMM yyyy HH:mm} UTC
+               """;
+
         var subject = $"Travel Request for Approval — {request.FormNumber} ({TravellerName(request)})";
         var body    = $"""
-            A travel request has been verified by the head of department and needs
-            management approval.
+            {opening}
 
             Form No:     {request.FormNumber}
             Traveller:   {TravellerName(request)}
@@ -429,24 +455,30 @@ public class NotificationService(
             Purpose:     {request.PurposeOfTravel}
             Hotel:       {(request.HotelBookingRequired ? "Required" : "Not required")}
 
-            Verified by: {request.VerifiedBy?.FullName ?? "Head of Department"}
-            Verified on: {request.VerifiedAt:dd MMM yyyy HH:mm} UTC
+            {verificationLines}
 
             {PlatformUrl()}
             """;
 
         await SendToRolesAsync(subject, body, "Management");
 
-        // Keep the requester informed that it has cleared the first stage.
+        // Keep the requester informed that it has cleared the first stage. When
+        // there was no verification stage, saying it was "verified" would be
+        // untrue, so the wording follows what actually happened.
         if (request.RequestedBy?.Email is { Length: > 0 } requesterEmail)
         {
+            var progressLine = skippedVerification
+                ? "Your travel request has gone straight to management for approval, as head\nof department requests do not need separate verification."
+                : $"Your travel request has been verified by {request.VerifiedBy?.FullName ?? "your head of department"}\nand is now with management for final approval.";
+
             await SendEmailAsync(requesterEmail,
-                $"Travel Request Verified — {request.FormNumber}",
+                skippedVerification
+                    ? $"Travel Request Submitted — {request.FormNumber}"
+                    : $"Travel Request Verified — {request.FormNumber}",
                 $"""
                 Hi {request.RequestedBy.FullName},
 
-                Your travel request has been verified by {request.VerifiedBy?.FullName ?? "your head of department"}
-                and is now with management for final approval.
+                {progressLine}
 
                 Form No:  {request.FormNumber}
                 Journey:  {TravelSummary(request)}

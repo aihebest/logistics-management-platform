@@ -120,10 +120,18 @@ public class TravelRequestController(
             PurposeOfTravel       = dto.PurposeOfTravel.Trim(),
             HotelBookingRequired  = dto.HotelBookingRequired,
             OtherInformation      = Trim(dto.OtherInformation),
-            Status                = "PendingVerification",
             CreatedAt             = DateTime.UtcNow,
             UpdatedAt             = DateTime.UtcNow
         };
+
+        // A head of department cannot verify their own travel — nobody signs off
+        // their own. The verification stage exists so a head vouches for their
+        // staff's travel; when the head is the one travelling there is nobody
+        // below them to do that, so the request goes straight to the DMD, who is
+        // the right and sufficient approver. Without this the request would be
+        // raised, emailed to the requester to verify, and then refused — stuck.
+        var raisedByTheHead = department.HodUserId == caller.Id;
+        request.Status = raisedByTheHead ? "PendingApproval" : "PendingVerification";
 
         var outboundSeq = 0;
         var inboundSeq  = 0;
@@ -151,7 +159,13 @@ public class TravelRequestController(
         request.RequestedBy = caller;
 
         // Notification failures must never lose a submitted form.
-        try { await NotifyVerifierAsync(request, department); }
+        try
+        {
+            if (raisedByTheHead)
+                await notifications.SendTravelRequestVerifiedAsync(request);   // straight to management
+            else
+                await NotifyVerifierAsync(request, department);
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Notification failed for travel request {Form} — the request itself was saved",
@@ -166,8 +180,13 @@ public class TravelRequestController(
     /// Only the head of the requester's own department may verify, so a head of
     /// another department cannot sign off work they have no visibility of.
     /// </summary>
+    // Deliberately not [Authorize(Roles = "HOD,...")]. Two of the three travel
+    // approvers — the heads of Logistics and General Services — hold the
+    // Management role, so a role check would lock them out of verifying their
+    // own departments. Whether someone heads the department is the real fact,
+    // and it is checked explicitly below.
     [HttpPatch("{id:guid}/verify")]
-    [Authorize(Roles = "HOD,Admin")]
+    [Authorize]
     public async Task<IActionResult> Verify(Guid id, [FromBody] TravelDecisionDto? dto)
     {
         var request = await BaseQuery().FirstOrDefaultAsync(x => x.Id == id);
@@ -189,14 +208,32 @@ public class TravelRequestController(
 
         var department = await db.Departments.FirstOrDefaultAsync(d => d.Name == request.Department);
 
-        // When the department has a head, only they may verify. When it has none
-        // yet, any head may — otherwise the request would be stuck with no route
-        // forward, which is worse than a slightly looser control.
-        if (department?.HodUserId != null && department.HodUserId != caller.Id && !User.IsInRole("Admin"))
-            return StatusCode(StatusCodes.Status403Forbidden, new
-            {
-                error = $"Only the head of {request.Department} can verify this request."
-            });
+        if (department?.HodUserId != null)
+        {
+            // The department has a head — only they may verify, whatever role
+            // they happen to hold. Heads of Logistics and General Services carry
+            // the Management role because they also approve travel, so this must
+            // key off headship rather than the role name.
+            if (department.HodUserId != caller.Id && !User.IsInRole("Admin"))
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    error = $"Only the head of {request.Department} can verify this request."
+                });
+        }
+        else
+        {
+            // No head assigned yet. Any head of department may step in, so the
+            // request is not stuck with nowhere to go — a looser control, but
+            // better than a dead end, and the warning at submission names the
+            // department so the gap gets closed.
+            var headsSomething = await db.Departments.AnyAsync(d => d.HodUserId == caller.Id);
+            if (!headsSomething && !User.IsInRole("HOD") && !User.IsInRole("Admin"))
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    error = $"{request.Department} has no head of department assigned, so only a head of " +
+                            "department can verify this request."
+                });
+        }
 
         request.Status            = "PendingApproval";
         request.VerifiedById      = caller.Id;
@@ -237,9 +274,34 @@ public class TravelRequestController(
         if (caller == null) return Unauthorized(new { error = "Cannot resolve user identity from token" });
 
         if (request.RequestedById == caller.Id)
+        {
+            // If nobody else holds Management, this request has nowhere to go —
+            // say so, rather than leaving them to work it out from a bare refusal.
+            var otherApprovers = await db.Users
+                .CountAsync(u => u.Role == "Management" && u.IsActive && u.Id != caller.Id);
+
+            logger.LogWarning(
+                "{Email} attempted to approve their own travel request {Form}; {Count} other Management user(s) available",
+                caller.Email, request.FormNumber, otherApprovers);
+
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
-                error = "You cannot approve a travel request you raised yourself."
+                error = otherApprovers > 0
+                    ? "You cannot approve a travel request you raised yourself. Another member of management must approve it."
+                    : "You cannot approve a travel request you raised yourself, and no one else currently holds " +
+                      "the Management role. Ask an administrator to give the Management role to a second approver."
+            });
+        }
+
+        // The form carries two signatures because two people are meant to look at
+        // it. The heads of Logistics and General Services both verify their own
+        // departments and approve travel generally, so without this one of them
+        // could sign both boxes on the same form.
+        if (request.VerifiedById == caller.Id)
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "You verified this request as head of department, so it must be approved by " +
+                        "someone else. Any other member of management can approve it."
             });
 
         request.Status        = "Approved";

@@ -48,9 +48,6 @@ export default function TravelRequestPage() {
   const [showForm, setShowForm] = useState(false)
   const [printing, setPrinting] = useState<TravelRequest | null>(null)
 
-  const canVerify  = hasRole('HOD', 'Admin')
-  const canApprove = hasRole('Management', 'Admin')
-
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ['travel', statusFilter],
     queryFn: () => travelApi.getAll({ status: statusFilter || undefined }),
@@ -64,6 +61,13 @@ export default function TravelRequestPage() {
   // Used to pre-fill the traveller's own details, as the paper form expects
   // them filled in but the platform already knows most of them.
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: authApi.me })
+
+  // Heading a department is what grants verification, not the role name. The
+  // heads of Logistics and General Services carry the Management role because
+  // they also approve travel, so a role check alone would hide Verify from them.
+  const headsADepartment = !!me && departments.some(d => d.hodUserId === me.id)
+  const canVerify  = hasRole('HOD', 'Admin') || headsADepartment
+  const canApprove = hasRole('Management', 'Admin')
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['travel'] })
@@ -228,7 +232,10 @@ export default function TravelRequestPage() {
                     </>
                   )}
 
-                  {canApprove && r.status === 'PendingApproval' && (
+                  {/* Whoever verified a request cannot also approve it — two
+                      signatures mean two people. Hidden here as well as blocked
+                      server-side, so nobody clicks into a refusal. */}
+                  {canApprove && r.status === 'PendingApproval' && r.verifiedByName !== me?.fullName && (
                     <>
                       <button
                         className="btn-primary text-xs"
