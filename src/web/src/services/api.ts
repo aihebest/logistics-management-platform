@@ -93,6 +93,11 @@ export interface User {
   licenceExpiry?: string
   isActive: boolean
   lastStatusChange?: string
+  /** Routes their travel requests to the head of this department. */
+  departmentId?: string
+  departmentName?: string
+  /** Job title, printed on the Travel Request Form. */
+  position?: string
 }
 
 export interface Vehicle {
@@ -385,24 +390,58 @@ export interface DriverPerformance {
 
 // ── Phase 3 Types ─────────────────────────────────────────────────────────────
 
+export interface Department {
+  id: string
+  name: string
+  hodUserId?: string
+  hodName?: string
+  hodEmail?: string
+  isActive: boolean
+  memberCount: number
+}
+
+/** One row of the Outbound or Inbound routing table on the TRF. */
+export interface TravelLeg {
+  direction: string           // Outbound | Inbound
+  sequence: number
+  travelDate: string
+  from: string
+  to: string
+  preferredAirline?: string
+  preferredTime?: string
+}
+
+/** Travel Request Form — DEL-LG-FRM-002 Rev 07. */
 export interface TravelRequest {
   id: string
+  formNumber: string
+  formDate: string
+  projectCostCentreCode?: string
+
+  requestedById: string
   requestedByName: string
-  travellerName: string
-  travelType: string          // LocalFlight | InternationalFlight | Hotel | Guesthouse | Immigration
-  purpose: string
-  origin: string
-  destination: string
-  travelDate: string
-  returnDate?: string
-  flightPreference?: string
-  hotelName?: string
-  numberOfNights?: number
-  passportNumber?: string
+  surname: string
+  givenName: string
+  department: string
+  position?: string
+  phoneNumber?: string
+  email?: string
+
+  purposeOfTravel: string
+  hotelBookingRequired: boolean
+  otherInformation?: string
+  legs: TravelLeg[]
+
+  // PendingVerification | PendingApproval | Approved | Rejected | Cancelled
   status: string
+  verifiedByName?: string
+  verifiedAt?: string
+  verificationNotes?: string
   approvedByName?: string
   approvedAt?: string
   approvalNotes?: string
+  rejectionReason?: string
+  rejectedAt?: string
   createdAt: string
 }
 
@@ -498,8 +537,16 @@ export const driversApi = {
 export const platformUsersApi = {
   getAll: (params?: { role?: string; pendingOnly?: boolean }) =>
     api.get<User[]>('/platform-users', { params }).then(r => r.data),
-  register: (data: { fullName: string; email: string; role: string; phoneNumber?: string }) =>
-    api.post<User>('/platform-users', data).then(r => r.data),
+  register: (data: {
+    fullName: string
+    email: string
+    role: string
+    phoneNumber?: string
+    /** Routes their travel requests to the head of this department. */
+    departmentId?: string
+    /** Job title, printed on the Travel Request Form. */
+    position?: string
+  }) => api.post<User>('/platform-users', data).then(r => r.data),
   update: (id: string, data: object) => api.patch(`/platform-users/${id}`, data),
 }
 
@@ -633,15 +680,27 @@ export const driverIncidentsApi = {
   delete: (id: string) => api.delete(`/driver-incidents/${id}`),
 }
 
-// Phase 3
+/** Departments and their heads — what routes a TRF to the right verifier. */
+export const departmentsApi = {
+  getAll: (includeInactive = false) =>
+    api.get<Department[]>('/departments', { params: { includeInactive } }).then(r => r.data),
+  create: (data: { name: string; hodUserId?: string }) =>
+    api.post<Department>('/departments', data).then(r => r.data),
+  update: (id: string, data: object) => api.patch(`/departments/${id}`, data),
+}
+
+/** Travel Request Form (DEL-LG-FRM-002 Rev 07). */
 export const travelApi = {
-  getAll: (params?: { status?: string; travelType?: string }) =>
+  getAll: (params?: { status?: string }) =>
     api.get<TravelRequest[]>('/travel', { params }).then(r => r.data),
   get: (id: string) => api.get<TravelRequest>(`/travel/${id}`).then(r => r.data),
   create: (data: object) => api.post<TravelRequest>('/travel', data).then(r => r.data),
-  approve: (id: string, action: string, notes?: string) =>
-    api.post(`/travel/${id}/approve`, { action, notes }),
-  markBooked: (id: string) => api.patch(`/travel/${id}/booked`),
+  /** Head of department verification — the middle signature block. */
+  verify: (id: string, notes?: string) => api.patch(`/travel/${id}/verify`, { notes }),
+  /** Final DMD/MD approval — the right-hand signature block. */
+  approve: (id: string, notes?: string) => api.patch(`/travel/${id}/approve`, { notes }),
+  reject: (id: string, reason: string) => api.patch(`/travel/${id}/reject`, { reason }),
+  cancel: (id: string) => api.patch(`/travel/${id}/cancel`),
 }
 
 export const projectMaterialsApi = {

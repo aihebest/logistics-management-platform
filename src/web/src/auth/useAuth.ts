@@ -2,7 +2,14 @@ import { useMsal } from '@azure/msal-react'
 import { useEffect, useState } from 'react'
 import { apiScopes, loginRequest } from './msalConfig'
 
-export type AppRole = 'Driver' | 'Coordinator' | 'Manager' | 'Mechanic' | 'HOD' | 'Admin'
+/**
+ * "Management" is the DMD/MD, who gives final approval on travel requests.
+ * Kept distinct from "Manager", which means the Logistics Manager.
+ * Must stay in step with ValidRoles in PlatformUsersController.
+ */
+export type AppRole =
+  | 'Driver' | 'Coordinator' | 'Manager' | 'Mechanic'
+  | 'HOD' | 'Management' | 'Staff' | 'Admin'
 
 /** Safely base64-decode a JWT payload segment to extract claims */
 function decodeJwtPayload(token: string): Record<string, unknown> {

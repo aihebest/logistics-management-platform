@@ -21,6 +21,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DriverIncident> DriverIncidents => Set<DriverIncident>();
     // Phase 3
     public DbSet<TravelRequest> TravelRequests => Set<TravelRequest>();
+    public DbSet<TravelRequestLeg> TravelRequestLegs => Set<TravelRequestLeg>();
+    public DbSet<Department> Departments => Set<Department>();
     public DbSet<ProjectMaterialTracking> ProjectMaterialTrackings => Set<ProjectMaterialTracking>();
     public DbSet<MovementRegister> MovementRegisters => Set<MovementRegister>();
 
@@ -47,6 +49,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .IsUnique()
              .HasFilter("[Email] IS NOT NULL AND [Email] <> ''");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.Property(x => x.Position).HasMaxLength(100);
+            // Closing a department must not delete its people.
+            e.HasOne(x => x.Department).WithMany(d => d.Members)
+             .HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.SetNull);
         });
 
         mb.Entity<Vehicle>(e =>
@@ -230,10 +236,62 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            // Form numbers are the reference the logistics team quote to each
+            // other, so two requests must never share one.
+            e.HasIndex(x => x.FormNumber).IsUnique();
+            // Lengths mirror the TRF migration — drift here is what produced
+            // SQL error 207 earlier in this project.
+            e.Property(x => x.FormNumber).HasMaxLength(30);
+            e.Property(x => x.ProjectCostCentreCode).HasMaxLength(50);
+            e.Property(x => x.Surname).HasMaxLength(100);
+            e.Property(x => x.GivenName).HasMaxLength(100);
+            e.Property(x => x.Department).HasMaxLength(100);
+            e.Property(x => x.Position).HasMaxLength(100);
+            e.Property(x => x.PhoneNumber).HasMaxLength(50);
+            e.Property(x => x.Email).HasMaxLength(256);
+            e.Property(x => x.PurposeOfTravel).HasMaxLength(1000);
+            e.Property(x => x.OtherInformation).HasMaxLength(1000);
+            e.Property(x => x.Status).HasMaxLength(30);
+            e.Property(x => x.VerificationNotes).HasMaxLength(500);
+            e.Property(x => x.ApprovalNotes).HasMaxLength(500);
+            e.Property(x => x.RejectionReason).HasMaxLength(500);
+
             e.HasOne(x => x.RequestedBy).WithMany()
              .HasForeignKey(x => x.RequestedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.VerifiedBy).WithMany()
+             .HasForeignKey(x => x.VerifiedById).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.ApprovedBy).WithMany()
              .HasForeignKey(x => x.ApprovedById).OnDelete(DeleteBehavior.SetNull);
+
+            // Legs belong to the form and have no life of their own.
+            e.HasMany(x => x.Legs)
+             .WithOne(l => l.TravelRequest)
+             .HasForeignKey(l => l.TravelRequestId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        mb.Entity<Department>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.HasIndex(x => x.Name).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(150);
+            // A head can be reassigned or leave without taking the department
+            // with them, so clear the link rather than blocking the delete.
+            e.HasOne(x => x.Hod).WithMany()
+             .HasForeignKey(x => x.HodUserId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        mb.Entity<TravelRequestLeg>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.Direction).HasMaxLength(20);
+            e.Property(x => x.From).HasMaxLength(150);
+            e.Property(x => x.To).HasMaxLength(150);
+            e.Property(x => x.PreferredAirline).HasMaxLength(100);
+            e.Property(x => x.PreferredTime).HasMaxLength(50);
         });
 
         mb.Entity<ProjectMaterialTracking>(e =>

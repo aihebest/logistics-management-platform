@@ -29,13 +29,16 @@ public class PlatformUsersController(
     IAuditService audit,
     ILogger<PlatformUsersController> logger) : ControllerBase
 {
+    // "Management" is the DMD/MD, who gives final approval on travel requests.
+    // Kept separate from "Manager", which means the Logistics Manager, and from
+    // "Admin", which carries user administration a DMD has no reason to hold.
     private static readonly string[] ValidRoles =
-        ["Admin", "Manager", "HOD", "Coordinator", "Mechanic", "Driver", "Staff"];
+        ["Admin", "Management", "Manager", "HOD", "Coordinator", "Mechanic", "Driver", "Staff"];
 
     [HttpGet]
     public async Task<IEnumerable<UserDto>> GetAll([FromQuery] string? role, [FromQuery] bool? pendingOnly)
     {
-        var q = db.Users.AsQueryable();
+        var q = db.Users.Include(u => u.Department).AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(role))
             q = q.Where(u => u.Role == role);
@@ -92,12 +95,18 @@ public class PlatformUsersController(
             PhoneNumber   = dto.PhoneNumber?.Trim(),
             Role          = dto.Role,
             DriverStatus  = dto.Role == "Driver" ? "OffDuty" : null,
+            DepartmentId  = dto.DepartmentId,
+            Position      = dto.Position?.Trim(),
             IsActive      = true,
             CreatedAt     = DateTime.UtcNow
         };
 
+        if (dto.DepartmentId.HasValue && !await db.Departments.AnyAsync(d => d.Id == dto.DepartmentId.Value))
+            return BadRequest(new { error = "That department was not found." });
+
         db.Users.Add(user);
         await db.SaveChangesAsync();
+        await db.Entry(user).Reference(u => u.Department).LoadAsync();
 
         await audit.LogAsync("User", user.Id.ToString(), "PreRegistered",
             User.GetEntraObjectId() ?? "", User.GetEmail(), null,
@@ -147,6 +156,25 @@ public class PlatformUsersController(
 
         if (dto.PhoneNumber != null) user.PhoneNumber = dto.PhoneNumber.Trim();
 
+        if (dto.Position != null && dto.Position.Trim() != user.Position)
+        {
+            changes.Add($"Position: {user.Position ?? "none"} → {dto.Position.Trim()}");
+            user.Position = dto.Position.Trim();
+        }
+
+        if (dto.DepartmentId.HasValue && dto.DepartmentId.Value != user.DepartmentId)
+        {
+            var department = await db.Departments.FindAsync(dto.DepartmentId.Value);
+            if (department == null) return BadRequest(new { error = "That department was not found." });
+
+            var previous = user.DepartmentId.HasValue
+                ? (await db.Departments.FindAsync(user.DepartmentId.Value))?.Name ?? "none"
+                : "none";
+
+            changes.Add($"Department: {previous} → {department.Name}");
+            user.DepartmentId = department.Id;
+        }
+
         if (dto.IsActive.HasValue && dto.IsActive.Value != user.IsActive)
         {
             changes.Add($"Active: {user.IsActive} → {dto.IsActive.Value}");
@@ -165,5 +193,6 @@ public class PlatformUsersController(
 
     private static UserDto ToDto(User u) => new(
         u.Id, u.FullName, u.Email, u.PhoneNumber, u.Role,
-        u.DriverStatus, u.LicenceNo, u.LicenceExpiry, u.IsActive, u.LastStatusChange);
+        u.DriverStatus, u.LicenceNo, u.LicenceExpiry, u.IsActive, u.LastStatusChange,
+        u.DepartmentId, u.Department?.Name, u.Position);
 }

@@ -37,6 +37,11 @@ public class AuthController(AppDbContext db, ICurrentUserService currentUser) : 
         if (resolved == null)
             return Unauthorized(new { error = "Cannot resolve user identity from token" });
 
+        // The travel request form pre-fills the traveller's own department and
+        // position from here, so load the department name alongside.
+        if (resolved.DepartmentId.HasValue && resolved.Department == null)
+            await db.Entry(resolved).Reference(u => u.Department).LoadAsync();
+
         return ToDto(resolved);
     }
 
@@ -52,5 +57,6 @@ public class AuthController(AppDbContext db, ICurrentUserService currentUser) : 
 
     private static UserDto ToDto(User u) => new(
         u.Id, u.FullName, u.Email, u.PhoneNumber, u.Role,
-        u.DriverStatus, u.LicenceNo, u.LicenceExpiry, u.IsActive, u.LastStatusChange);
+        u.DriverStatus, u.LicenceNo, u.LicenceExpiry, u.IsActive, u.LastStatusChange,
+        u.DepartmentId, u.Department?.Name, u.Position);
 }

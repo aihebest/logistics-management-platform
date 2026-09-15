@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { platformUsersApi, apiErrorMessage, type User } from '../../services/api'
+import { platformUsersApi, departmentsApi, apiErrorMessage, type User } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
@@ -14,10 +14,13 @@ import toast from 'react-hot-toast'
  * notifications reach them, and their account links up on first sign-in.
  */
 
-const ROLES = ['HOD', 'Manager', 'Coordinator', 'Mechanic', 'Driver', 'Staff', 'Admin']
+// "Management" is the DMD/MD, who gives final approval on travel requests —
+// distinct from "Manager", which means the Logistics Manager.
+const ROLES = ['Management', 'HOD', 'Manager', 'Coordinator', 'Mechanic', 'Driver', 'Staff', 'Admin']
 
 const ROLE_STYLES: Record<string, string> = {
   Admin:       'bg-purple-100 text-purple-800',
+  Management:  'bg-indigo-100 text-indigo-800',
   Manager:     'bg-blue-100 text-blue-800',
   HOD:         'bg-amber-100 text-amber-800',
   Coordinator: 'bg-teal-100 text-teal-800',
@@ -35,6 +38,12 @@ export default function PlatformUsersPage() {
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['platform-users', roleFilter],
     queryFn: () => platformUsersApi.getAll({ role: roleFilter || undefined }),
+  })
+
+  // Department decides who verifies this person's travel requests.
+  const { data: departments = [] } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => departmentsApi.getAll(),
   })
 
   const refresh = () => {
@@ -62,6 +71,8 @@ export default function PlatformUsersPage() {
       email: (fd.get('email') as string).trim(),
       role: fd.get('role') as string,
       phoneNumber: (fd.get('phoneNumber') as string)?.trim() || undefined,
+      departmentId: (fd.get('departmentId') as string) || undefined,
+      position: (fd.get('position') as string)?.trim() || undefined,
     })
   }
 
@@ -75,6 +86,8 @@ export default function PlatformUsersPage() {
         email: (fd.get('email') as string)?.trim() || undefined,
         role: fd.get('role') as string || undefined,
         phoneNumber: (fd.get('phoneNumber') as string)?.trim() || undefined,
+        departmentId: (fd.get('departmentId') as string) || undefined,
+        position: (fd.get('position') as string)?.trim() || undefined,
         isActive: fd.get('isActive') === 'Active',
       },
     })
@@ -133,6 +146,18 @@ export default function PlatformUsersPage() {
               <label className="label">Phone</label>
               <input name="phoneNumber" className="input" placeholder="Optional" />
             </div>
+            <div>
+              <label className="label">Department</label>
+              <select name="departmentId" className="input" defaultValue="">
+                <option value="">Not set</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Decides who verifies their travel requests.</p>
+            </div>
+            <div>
+              <label className="label">Position</label>
+              <input name="position" className="input" placeholder="e.g. Project Engineer" />
+            </div>
             <div className="col-span-full flex gap-3">
               <button type="submit" className="btn-primary" disabled={register.isPending}>
                 {register.isPending ? 'Adding…' : 'Add User'}
@@ -170,6 +195,17 @@ export default function PlatformUsersPage() {
               <input name="phoneNumber" className="input" defaultValue={editing.phoneNumber ?? ''} />
             </div>
             <div>
+              <label className="label">Department</label>
+              <select name="departmentId" className="input" defaultValue={editing.departmentId ?? ''}>
+                <option value="">Not set</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Position</label>
+              <input name="position" className="input" defaultValue={editing.position ?? ''} />
+            </div>
+            <div>
               <label className="label">Status</label>
               <select name="isActive" className="input" defaultValue={editing.isActive ? 'Active' : 'Inactive'}>
                 <option>Active</option><option>Inactive</option>
@@ -198,7 +234,7 @@ export default function PlatformUsersPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['Name', 'Email', 'Role', 'Phone', 'Status', ''].map(h => (
+                {['Name', 'Email', 'Role', 'Department', 'Phone', 'Status', ''].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                 ))}
               </tr>
@@ -214,6 +250,9 @@ export default function PlatformUsersPage() {
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${ROLE_STYLES[u.role] ?? 'bg-gray-100 text-gray-700'}`}>
                       {u.role}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                    {u.departmentName ?? <span className="text-gray-400">—</span>}
                   </td>
                   <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{u.phoneNumber || '—'}</td>
                   <td className="px-4 py-3">
@@ -234,7 +273,7 @@ export default function PlatformUsersPage() {
                 </tr>
               ))}
               {users.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400">No users found</td></tr>
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400">No users found</td></tr>
               )}
             </tbody>
           </table>

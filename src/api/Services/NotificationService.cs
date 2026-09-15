@@ -28,6 +28,13 @@ public interface INotificationService
 
     // ── Maintenance ─────────────────────────────────────────────────────────────
     Task SendVehicleServiceDueAsync(Vehicle vehicle, int daysUntilDue);
+
+    // ── Travel Request Form ─────────────────────────────────────────────────────
+    /// <summary>Pass the department's head, or null to fall back to all HODs.</summary>
+    Task SendTravelRequestSubmittedAsync(TravelRequest request, User? hod);
+    Task SendTravelRequestVerifiedAsync(TravelRequest request);
+    Task SendTravelRequestApprovedAsync(TravelRequest request);
+    Task SendTravelRequestRejectedAsync(TravelRequest request, string rejectedByName);
     Task SendMaintenanceOverdueAsync(MaintenanceRecord record);
     Task SendEmergencyMaintenanceLoggedAsync(MaintenanceRecord record);
     Task SendMaintenanceCompletedAsync(MaintenanceRecord record);
@@ -321,6 +328,221 @@ public class NotificationService(
 
         await SendToMaintenanceTeamAsync(subject, body);
         logger.LogInformation("Service due reminder sent: {Vehicle} — {Days} days", vehicle.RegistrationNo, daysUntilDue);
+    }
+
+    // ── Travel Request Form (DEL-LG-FRM-002) ────────────────────────────────────
+
+    /// <summary>
+    /// Short description of the journey for an email subject or summary line —
+    /// the first outbound leg, which is what people recognise the trip by.
+    /// </summary>
+    private static string TravelSummary(TravelRequest r)
+    {
+        var first = r.Legs
+            .Where(l => l.Direction == "Outbound")
+            .OrderBy(l => l.Sequence)
+            .FirstOrDefault();
+
+        return first == null
+            ? r.PurposeOfTravel
+            : $"{first.From} → {first.To} on {first.TravelDate:dd MMM yyyy}";
+    }
+
+    private static string TravellerName(TravelRequest r) => $"{r.GivenName} {r.Surname}".Trim();
+
+    /// <summary>
+    /// A submitted form is waiting on the head of the requester's department.
+    /// When that department has no registered head, every HOD is told instead so
+    /// the request is not left with nowhere to go.
+    /// </summary>
+    public async Task SendTravelRequestSubmittedAsync(TravelRequest request, User? hod)
+    {
+        var subject = $"Travel Request for Verification — {request.FormNumber} ({TravellerName(request)})";
+        var body    = $"""
+            A travel request needs your verification.
+
+            Form No:     {request.FormNumber}
+            Traveller:   {TravellerName(request)}
+            Department:  {request.Department}
+            Position:    {request.Position ?? "Not stated"}
+            Journey:     {TravelSummary(request)}
+            Purpose:     {request.PurposeOfTravel}
+            Hotel:       {(request.HotelBookingRequired ? "Required" : "Not required")}
+
+            Once you verify it, the request goes to the DMD for management approval.
+
+            {PlatformUrl()}
+            """;
+
+        if (hod is { Email.Length: > 0 })
+        {
+            await SendEmailAsync(hod.Email, subject, body);
+            await NotifyInAppAsync(hod.Id, "TravelRequestSubmitted", subject,
+                $"{TravellerName(request)} — {TravelSummary(request)}",
+                "TravelRequest", request.Id.ToString());
+        }
+        else
+        {
+            // No head registered for that department — tell them all, and say why.
+            await SendToRolesAsync(
+                subject,
+                body + $"\n\nNote: {request.Department} has no head of department assigned on the " +
+                       "platform, so this has gone to all HODs. Please assign one under Departments.",
+                "HOD");
+        }
+
+        // Confirm receipt to whoever raised it.
+        var requester = request.RequestedBy;
+        if (requester?.Email is { Length: > 0 } requesterEmail)
+        {
+            await SendEmailAsync(requesterEmail,
+                $"Travel Request Received — {request.FormNumber}",
+                $"""
+                Hi {requester.FullName},
+
+                Your travel request has been received and is with your head of department
+                for verification. You will be notified when it has been approved.
+
+                Form No:   {request.FormNumber}
+                Journey:   {TravelSummary(request)}
+                Purpose:   {request.PurposeOfTravel}
+
+                {PlatformUrl()}
+                """);
+        }
+
+        logger.LogInformation("Travel request {Form} submitted notifications sent", request.FormNumber);
+    }
+
+    /// <summary>Verified by the head of department — now waiting on the DMD/MD.</summary>
+    public async Task SendTravelRequestVerifiedAsync(TravelRequest request)
+    {
+        var subject = $"Travel Request for Approval — {request.FormNumber} ({TravellerName(request)})";
+        var body    = $"""
+            A travel request has been verified by the head of department and needs
+            management approval.
+
+            Form No:     {request.FormNumber}
+            Traveller:   {TravellerName(request)}
+            Department:  {request.Department}
+            Journey:     {TravelSummary(request)}
+            Purpose:     {request.PurposeOfTravel}
+            Hotel:       {(request.HotelBookingRequired ? "Required" : "Not required")}
+
+            Verified by: {request.VerifiedBy?.FullName ?? "Head of Department"}
+            Verified on: {request.VerifiedAt:dd MMM yyyy HH:mm} UTC
+
+            {PlatformUrl()}
+            """;
+
+        await SendToRolesAsync(subject, body, "Management");
+
+        // Keep the requester informed that it has cleared the first stage.
+        if (request.RequestedBy?.Email is { Length: > 0 } requesterEmail)
+        {
+            await SendEmailAsync(requesterEmail,
+                $"Travel Request Verified — {request.FormNumber}",
+                $"""
+                Hi {request.RequestedBy.FullName},
+
+                Your travel request has been verified by {request.VerifiedBy?.FullName ?? "your head of department"}
+                and is now with management for final approval.
+
+                Form No:  {request.FormNumber}
+                Journey:  {TravelSummary(request)}
+
+                {PlatformUrl()}
+                """);
+        }
+
+        logger.LogInformation("Travel request {Form} verified notifications sent", request.FormNumber);
+    }
+
+    /// <summary>
+    /// Fully approved. Logistics can now download the completed form and book,
+    /// so they are the ones who need this most.
+    /// </summary>
+    public async Task SendTravelRequestApprovedAsync(TravelRequest request)
+    {
+        var subject = $"Travel Request APPROVED — {request.FormNumber} ({TravellerName(request)})";
+        var body    = $"""
+            A travel request has been fully approved and is ready to be processed.
+
+            Form No:     {request.FormNumber}
+            Traveller:   {TravellerName(request)}
+            Department:  {request.Department}
+            Phone:       {request.PhoneNumber ?? "Not given"}
+            Email:       {request.Email ?? "Not given"}
+            Journey:     {TravelSummary(request)}
+            Purpose:     {request.PurposeOfTravel}
+            Hotel:       {(request.HotelBookingRequired ? "REQUIRED" : "Not required")}
+            Cost Centre: {request.ProjectCostCentreCode ?? "Not stated"}
+
+            Verified by: {request.VerifiedBy?.FullName ?? "—"} on {request.VerifiedAt:dd MMM yyyy HH:mm}
+            Approved by: {request.ApprovedBy?.FullName ?? "—"} on {request.ApprovedAt:dd MMM yyyy HH:mm}
+
+            Open the request in the platform and use Download Form to produce the
+            signed PDF for booking.
+
+            {PlatformUrl()}
+            """;
+
+        await SendToRolesAsync(subject, body, "Coordinator", "Manager");
+
+        if (request.RequestedBy?.Email is { Length: > 0 } requesterEmail)
+        {
+            await SendEmailAsync(requesterEmail,
+                $"Travel Request Approved — {request.FormNumber}",
+                $"""
+                Hi {request.RequestedBy.FullName},
+
+                Your travel request has been approved by management and passed to the
+                logistics team to book.
+
+                Form No:  {request.FormNumber}
+                Journey:  {TravelSummary(request)}
+
+                Please notify the Logistics Unit of any change to your travel date at
+                least 24 hours before departure.
+
+                {PlatformUrl()}
+                """);
+
+            await NotifyInAppAsync(request.RequestedById, "TravelRequestApproved",
+                $"Travel request {request.FormNumber} approved",
+                TravelSummary(request), "TravelRequest", request.Id.ToString());
+        }
+
+        logger.LogInformation("Travel request {Form} approved notifications sent", request.FormNumber);
+    }
+
+    public async Task SendTravelRequestRejectedAsync(TravelRequest request, string rejectedByName)
+    {
+        if (request.RequestedBy?.Email is not { Length: > 0 } to) return;
+
+        var subject = $"Travel Request Not Approved — {request.FormNumber}";
+        var body    = $"""
+            Hi {request.RequestedBy.FullName},
+
+            Your travel request could not be approved.
+
+            Form No:  {request.FormNumber}
+            Journey:  {TravelSummary(request)}
+            Reason:   {request.RejectionReason ?? "No reason given"}
+            Decided by: {rejectedByName}
+
+            Speak with {rejectedByName} if you need to discuss it, or raise a new
+            request with the details corrected.
+
+            {PlatformUrl()}
+            """;
+
+        await SendEmailAsync(to, subject, body);
+        await NotifyInAppAsync(request.RequestedById, "TravelRequestRejected", subject,
+            request.RejectionReason ?? "No reason given",
+            "TravelRequest", request.Id.ToString());
+
+        logger.LogInformation("Travel request {Form} rejection notification sent", request.FormNumber);
     }
 
     public async Task SendMaintenanceOverdueAsync(MaintenanceRecord record)

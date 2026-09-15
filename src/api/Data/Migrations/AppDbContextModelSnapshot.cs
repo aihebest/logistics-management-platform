@@ -167,10 +167,73 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<DateTime?>("LastStatusChange").HasColumnType("datetime2");
                 b.Property<string>("PhoneNumber").HasMaxLength(20).HasColumnType("nvarchar(20)");
                 b.Property<string>("Role").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)");
+                b.Property<Guid?>("DepartmentId").HasColumnType("uniqueidentifier");
+                b.Property<string>("Position").HasMaxLength(100).HasColumnType("nvarchar(100)");
                 b.HasKey("Id");
                 b.HasIndex("Email").IsUnique().HasFilter("[Email] IS NOT NULL AND [Email] <> ''");
                 b.HasIndex("EntraObjectId").IsUnique();
+                b.HasIndex("DepartmentId");
                 b.ToTable("Users");
+            });
+
+            modelBuilder.Entity("LogisticsApi.Models.Entities.Department", b =>
+            {
+                b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");
+                b.Property<string>("Name").IsRequired().HasMaxLength(150).HasColumnType("nvarchar(150)");
+                b.Property<Guid?>("HodUserId").HasColumnType("uniqueidentifier");
+                b.Property<bool>("IsActive").HasColumnType("bit");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
+                b.HasKey("Id");
+                b.HasIndex("Name").IsUnique();
+                b.ToTable("Departments");
+            });
+
+            modelBuilder.Entity("LogisticsApi.Models.Entities.TravelRequest", b =>
+            {
+                b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");
+                b.Property<string>("FormNumber").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)");
+                b.Property<DateTime>("FormDate").HasColumnType("datetime2");
+                b.Property<string>("ProjectCostCentreCode").HasMaxLength(50).HasColumnType("nvarchar(50)");
+                b.Property<Guid>("RequestedById").HasColumnType("uniqueidentifier");
+                b.Property<string>("Surname").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+                b.Property<string>("GivenName").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+                b.Property<string>("Department").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+                b.Property<string>("Position").HasMaxLength(100).HasColumnType("nvarchar(100)");
+                b.Property<string>("PhoneNumber").HasMaxLength(50).HasColumnType("nvarchar(50)");
+                b.Property<string>("Email").HasMaxLength(256).HasColumnType("nvarchar(256)");
+                b.Property<string>("PurposeOfTravel").IsRequired().HasMaxLength(1000).HasColumnType("nvarchar(1000)");
+                b.Property<bool>("HotelBookingRequired").HasColumnType("bit");
+                b.Property<string>("OtherInformation").HasMaxLength(1000).HasColumnType("nvarchar(1000)");
+                b.Property<string>("Status").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)").HasDefaultValue("PendingVerification");
+                b.Property<Guid?>("VerifiedById").HasColumnType("uniqueidentifier");
+                b.Property<DateTime?>("VerifiedAt").HasColumnType("datetime2");
+                b.Property<string>("VerificationNotes").HasMaxLength(500).HasColumnType("nvarchar(500)");
+                b.Property<Guid?>("ApprovedById").HasColumnType("uniqueidentifier");
+                b.Property<DateTime?>("ApprovedAt").HasColumnType("datetime2");
+                b.Property<string>("ApprovalNotes").HasMaxLength(500).HasColumnType("nvarchar(500)");
+                b.Property<string>("RejectionReason").HasMaxLength(500).HasColumnType("nvarchar(500)");
+                b.Property<DateTime?>("RejectedAt").HasColumnType("datetime2");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
+                b.Property<DateTime>("UpdatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
+                b.HasKey("Id");
+                b.HasIndex("FormNumber").IsUnique();
+                b.ToTable("TravelRequests");
+            });
+
+            modelBuilder.Entity("LogisticsApi.Models.Entities.TravelRequestLeg", b =>
+            {
+                b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");
+                b.Property<Guid>("TravelRequestId").HasColumnType("uniqueidentifier");
+                b.Property<string>("Direction").IsRequired().HasMaxLength(20).HasColumnType("nvarchar(20)");
+                b.Property<int>("Sequence").HasColumnType("int");
+                b.Property<DateOnly>("TravelDate").HasColumnType("date");
+                b.Property<string>("From").IsRequired().HasMaxLength(150).HasColumnType("nvarchar(150)");
+                b.Property<string>("To").IsRequired().HasMaxLength(150).HasColumnType("nvarchar(150)");
+                b.Property<string>("PreferredAirline").HasMaxLength(100).HasColumnType("nvarchar(100)");
+                b.Property<string>("PreferredTime").HasMaxLength(50).HasColumnType("nvarchar(50)");
+                b.HasKey("Id");
+                b.HasIndex("TravelRequestId");
+                b.ToTable("TravelRequestLegs");
             });
 
             modelBuilder.Entity("LogisticsApi.Models.Entities.Vehicle", b =>

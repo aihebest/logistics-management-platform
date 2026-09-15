@@ -1,46 +1,107 @@
 namespace LogisticsApi.Models.DTOs;
 
-// ── Travel / Ticketing / Accommodation Requests ───────────────────────────────
+// ── Departments ───────────────────────────────────────────────────────────────
+
+public record DepartmentDto(
+    Guid Id,
+    string Name,
+    Guid? HodUserId,
+    string? HodName,
+    string? HodEmail,
+    bool IsActive,
+    int MemberCount
+);
+
+public record CreateDepartmentDto(string Name, Guid? HodUserId = null);
+
+public record UpdateDepartmentDto(
+    string? Name = null,
+    Guid? HodUserId = null,
+    bool? ClearHod = null,      // set true to remove the head without naming a new one
+    bool? IsActive = null
+);
+
+// ── Travel Request Form (DEL-LG-FRM-002 Rev 07) ───────────────────────────────
+
+/// <summary>One row of the Outbound or Inbound routing table.</summary>
+public record TravelLegDto(
+    string Direction,        // Outbound | Inbound
+    int Sequence,
+    DateOnly TravelDate,
+    string From,
+    string To,
+    string? PreferredAirline,
+    string? PreferredTime
+);
 
 public record TravelRequestDto(
     Guid Id,
+    string FormNumber,
+    DateTime FormDate,
+    string? ProjectCostCentreCode,
+
+    // Traveller
+    Guid RequestedById,
     string RequestedByName,
-    string TravellerName,
-    string TravelType,    // LocalFlight | InternationalFlight | Hotel | Guesthouse | Immigration
-    string Purpose,
-    string Origin,
-    string Destination,
-    DateOnly TravelDate,
-    DateOnly? ReturnDate,
-    string? FlightPreference,
-    string? HotelName,
-    int? NumberOfNights,
-    string? PassportNumber,
-    string Status,        // Pending | Approved | Rejected | Booked
+    string Surname,
+    string GivenName,
+    string Department,
+    string? Position,
+    string? PhoneNumber,
+    string? Email,
+
+    string PurposeOfTravel,
+    bool HotelBookingRequired,
+    string? OtherInformation,
+    IReadOnlyList<TravelLegDto> Legs,
+
+    // Signature blocks — these are what print on the form
+    string Status,
+    string? VerifiedByName,
+    DateTime? VerifiedAt,
+    string? VerificationNotes,
     string? ApprovedByName,
     DateTime? ApprovedAt,
     string? ApprovalNotes,
+    string? RejectionReason,
+    DateTime? RejectedAt,
+
     DateTime CreatedAt
 );
 
+/// <summary>
+/// NOTE: FormNumber and FormDate are deliberately absent — the server assigns
+/// both at submission, so a form cannot be given a duplicate reference or
+/// back-dated.
+/// </summary>
 public record CreateTravelRequestDto(
-    string TravellerName,
-    string TravelType,
-    string Purpose,
-    string Origin,
-    string Destination,
-    DateOnly TravelDate,
-    DateOnly? ReturnDate = null,
-    string? FlightPreference = null,
-    string? HotelName = null,
-    int? NumberOfNights = null,
-    string? PassportNumber = null
+    string Surname,
+    string GivenName,
+    string Department,
+    string PurposeOfTravel,
+    IReadOnlyList<CreateTravelLegDto> Legs,
+    string? ProjectCostCentreCode = null,
+    string? Position = null,
+    string? PhoneNumber = null,
+    string? Email = null,
+    bool HotelBookingRequired = false,
+    string? OtherInformation = null
 );
 
-public record ApproveTravelRequestDto(
-    string Action,    // Approve | Reject
-    string? Notes
+public record CreateTravelLegDto(
+    string Direction,        // Outbound | Inbound
+    DateOnly TravelDate,
+    string From,
+    string To,
+    string? PreferredAirline = null,
+    string? PreferredTime = null
 );
+
+/// <summary>Body for the HOD verification and the DMD/MD approval steps.</summary>
+public record TravelDecisionDto(string? Notes);
+
+/// <summary>Body for turning a request down at either stage.</summary>
+public record RejectTravelRequestDto(string? Reason);
 
 // ── Project Material Tracking (mirrors STATUS REPORT xlsx) ───────────────────
 

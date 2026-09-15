@@ -10,7 +10,12 @@ public record UserDto(
     string? LicenceNo,
     DateOnly? LicenceExpiry,
     bool IsActive,
-    DateTime? LastStatusChange
+    DateTime? LastStatusChange,
+    // Defaulted so the driver and auth endpoints, which don't carry department
+    // detail, keep working without change.
+    Guid? DepartmentId = null,
+    string? DepartmentName = null,
+    string? Position = null
 );
 
 /// <summary>
@@ -21,8 +26,10 @@ public record UserDto(
 public record RegisterPlatformUserDto(
     string FullName,
     string Email,
-    string Role,                 // HOD | Manager | Coordinator | Mechanic | Driver | Staff
-    string? PhoneNumber = null
+    string Role,                 // Management | HOD | Manager | Coordinator | Mechanic | Driver | Staff
+    string? PhoneNumber = null,
+    Guid? DepartmentId = null,   // routes their travel requests to the right head
+    string? Position = null      // printed on the Travel Request Form
 );
 
 /// <summary>Admin correction to an existing platform user.</summary>
@@ -31,7 +38,9 @@ public record UpdatePlatformUserDto(
     string? Email = null,
     string? Role = null,
     string? PhoneNumber = null,
-    bool? IsActive = null
+    bool? IsActive = null,
+    Guid? DepartmentId = null,
+    string? Position = null
 );
 
 public record UpdateDriverStatusDto(string Status);
