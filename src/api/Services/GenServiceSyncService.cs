@@ -4,6 +4,7 @@ using System.Text.Json;
 using LogisticsApi.Data;
 using LogisticsApi.Models.DTOs;
 using LogisticsApi.Models.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace LogisticsApi.Services;
 
@@ -108,7 +109,7 @@ public class GenServiceSyncService(
             Description:        record.FaultDescription ?? record.Type,
             // A reported fault means the vehicle is already off the road.
             Priority:           record.FaultReported ? "High" : "Normal",
-            CurrentLocation:    null,
+            CurrentLocation:    await ResolveLocationAsync(vehicle.Id, ct),
             OdometerKm:         vehicle.OdometerKm == 0 ? null : vehicle.OdometerKm,
             DateReported:       record.ScheduledDate.ToString("yyyy-MM-dd"),
             VendorName:         record.VendorName,
@@ -172,6 +173,38 @@ public class GenServiceSyncService(
             return GenServiceHandoff.Fail(
                 $"Could not reach General Service. {Truncate(ex.Message, 200)}");
         }
+    }
+
+    /// <summary>
+    /// Where the vehicle operates from, for the "REPAIR / MAINTENANCE LOCATION"
+    /// column on the General Service register.
+    ///
+    /// Neither the vehicle nor the maintenance record carries a location on this
+    /// platform, so the best available signal is where it was last fuelled.
+    /// Falling back to a configured default matters: sending nothing leaves the
+    /// column blank on their register, which is exactly the defect the
+    /// coordinators reported.
+    /// </summary>
+    private async Task<string?> ResolveLocationAsync(Guid vehicleId, CancellationToken ct)
+    {
+        try
+        {
+            var lastKnown = await db.FuelLogs
+                .AsNoTracking()
+                .Where(f => f.VehicleId == vehicleId && f.LocationId != null)
+                .OrderByDescending(f => f.FuelDate)
+                .Select(f => f.Location!.Name)
+                .FirstOrDefaultAsync(ct);
+
+            if (!string.IsNullOrWhiteSpace(lastKnown)) return lastKnown;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not resolve a location for vehicle {VehicleId}.", vehicleId);
+        }
+
+        var fallback = cfg["Integration:GenService:DefaultLocation"];
+        return string.IsNullOrWhiteSpace(fallback) ? null : fallback.Trim();
     }
 
     private static string Truncate(string s, int max) =>

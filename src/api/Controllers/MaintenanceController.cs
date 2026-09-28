@@ -14,6 +14,7 @@ public class MaintenanceController(
     AppDbContext db,
     INotificationService notifications,
     IGenServiceSyncService genService,
+    IAuditService audit,
     ILogger<MaintenanceController> logger) : ControllerBase
 {
     [HttpGet]
@@ -171,7 +172,9 @@ public class MaintenanceController(
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Manager,Mechanic,Admin")]
+    // Coordinators log most maintenance records, so they are the ones who spot
+    // and correct a wrong plate number.
+    [Authorize(Roles = "Coordinator,Manager,Mechanic,Admin")]
     public async Task<IActionResult> Update(Guid id, UpdateMaintenanceRecordDto dto)
     {
         var record = await db.MaintenanceRecords.Include(m => m.Vehicle).FirstOrDefaultAsync(m => m.Id == id);
@@ -199,6 +202,60 @@ public class MaintenanceController(
                 record.Vehicle.Status = "Available";
             record.Vehicle.UpdatedAt = DateTime.UtcNow;
         }
+        // ── Corrections ──────────────────────────────────────────────────────
+        // A record raised against the wrong plate number could not be fixed
+        // before, which left the wrong vehicle carrying someone else's
+        // maintenance history. Changes here are written to the audit trail.
+        var corrections = new List<string>();
+
+        if (dto.VehicleId.HasValue && dto.VehicleId.Value != record.VehicleId)
+        {
+            var vehicle = await db.Vehicles.FindAsync(dto.VehicleId.Value);
+            if (vehicle == null) return BadRequest(new { error = "Vehicle not found" });
+
+            corrections.Add($"Vehicle: {record.Vehicle?.RegistrationNo ?? "—"} → {vehicle.RegistrationNo}");
+
+            // The original vehicle may have been taken out of service when this
+            // was logged as a fault. Put it back, and pull the correct one out.
+            if (record.Vehicle != null
+                && record.Vehicle.Status == "InMaintenance"
+                && record.Status is not ("Completed" or "Cancelled"))
+            {
+                record.Vehicle.Status    = "Available";
+                record.Vehicle.UpdatedAt = DateTime.UtcNow;
+            }
+
+            if (record.FaultReported && record.Status is not ("Completed" or "Cancelled"))
+            {
+                vehicle.Status    = "InMaintenance";
+                vehicle.UpdatedAt = DateTime.UtcNow;
+            }
+
+            record.VehicleId = vehicle.Id;
+            record.Vehicle   = vehicle;
+        }
+
+        if (dto.Type != null && dto.Type != record.Type)
+        {
+            corrections.Add($"Type: {record.Type} → {dto.Type}");
+            record.Type = dto.Type;
+        }
+
+        if (dto.Category != null && dto.Category != record.Category)
+        {
+            corrections.Add($"Category: {record.Category} → {dto.Category}");
+            record.Category = dto.Category;
+            record.FaultReported = dto.Category == "FaultRepair";
+        }
+
+        if (dto.ScheduledDate.HasValue && dto.ScheduledDate.Value != record.ScheduledDate)
+        {
+            corrections.Add($"Date Reported: {record.ScheduledDate} → {dto.ScheduledDate.Value}");
+            record.ScheduledDate = dto.ScheduledDate.Value;
+        }
+
+        if (dto.FaultDescription != null) record.FaultDescription = dto.FaultDescription;
+
         if (dto.DateReturned.HasValue) record.DateReturned = dto.DateReturned;
         if (dto.Cost.HasValue) record.Cost = dto.Cost;
         if (dto.VendorName != null) record.VendorName = dto.VendorName;
@@ -209,6 +266,23 @@ public class MaintenanceController(
         record.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
+
+        // Corrections to the identifying details are audited — reassigning a
+        // record to a different vehicle rewrites that vehicle's history, so it
+        // needs to be traceable to whoever did it and why.
+        if (corrections.Count > 0)
+        {
+            var reason = string.IsNullOrWhiteSpace(dto.CorrectionReason)
+                ? "No reason given"
+                : dto.CorrectionReason.Trim();
+
+            await audit.LogAsync("MaintenanceRecord", id.ToString(), "Corrected",
+                User.GetEntraObjectId() ?? "", User.GetEmail(), null,
+                $"Reason: {reason}. Changes — {string.Join("; ", corrections)}");
+
+            logger.LogInformation("Maintenance record {Id} corrected by {Email}: {Changes}",
+                id, User.GetEmail(), string.Join("; ", corrections));
+        }
 
         // Notify on completion (maintenance done + vehicle back in service)
         if (justCompleted)

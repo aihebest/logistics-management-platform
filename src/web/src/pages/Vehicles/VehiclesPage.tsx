@@ -111,7 +111,7 @@ export default function VehiclesPage() {
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input w-auto">
             {STATUS_FILTER.map(s => <option key={s} value={s}>{s || 'All Status'}</option>)}
           </select>
-          {hasRole('Manager', 'Admin') && (
+          {hasRole('Coordinator', 'Manager', 'Admin') && (
             <button className="btn-primary" onClick={() => setShowForm(!showForm)}>+ Add Vehicle</button>
           )}
         </div>
@@ -313,7 +313,7 @@ export default function VehiclesPage() {
                     {v.year > 0 ? `${v.vehicleAge}yr` : '—'}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-right space-x-3">
-                    {hasRole('Manager', 'Admin', 'Mechanic') && (
+                    {hasRole('Coordinator', 'Manager', 'Admin', 'Mechanic') && (
                       <button
                         onClick={() => { setEditVehicle(v); setShowForm(false) }}
                         className="text-xs text-brand-600 hover:underline"

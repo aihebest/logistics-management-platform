@@ -11,8 +11,10 @@ namespace LogisticsApi.Controllers;
 public class ReportsController(IReportingService reporting) : ControllerBase
 {
     [HttpGet("dashboard")]
-    [AllowAnonymous] // Auth still required via [Authorize] on class, but allow all roles
-    [Authorize]
+    // The dashboard carries fleet-wide figures, pending approvals and other
+    // departments' movements. Ordinary staff raise requests and see their own,
+    // so this is restricted to the people who run operations.
+    [Authorize(Roles = "Coordinator,Manager,Mechanic,HOD,Management,Admin")]
     public async Task<DashboardSummaryDto> GetDashboard()
         => await reporting.GetDashboardSummaryAsync();
 

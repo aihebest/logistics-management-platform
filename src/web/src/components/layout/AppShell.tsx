@@ -4,11 +4,22 @@ import { useAuth } from '../../auth/useAuth'
 import { useQuery } from '@tanstack/react-query'
 import { authApi, notificationsApi } from '../../services/api'
 
+/**
+ * `roles: []` means everyone signed in. Anything else is restricted to the
+ * roles listed.
+ *
+ * Ordinary staff raise trip and travel requests and nothing else, so they see
+ * only those two. Fleet figures, other departments' movements, fuel spend and
+ * the dashboard are operational data and stay with the people who run
+ * operations — confirmed with the travel coordinator during UAT.
+ */
+const OPS = ['Coordinator', 'Manager', 'Mechanic', 'HOD', 'Management', 'Admin']
+
 const navGroups = [
   {
     group: 'Overview',
     items: [
-      { to: '/dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', roles: [] as string[] },
+      { to: '/dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', roles: OPS },
     ],
   },
   {
@@ -16,18 +27,18 @@ const navGroups = [
     items: [
       { to: '/trips', label: 'Trip Requests', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', roles: [] as string[] },
       { to: '/assignments', label: 'Assignments', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', roles: ['Coordinator', 'Manager', 'Admin'] },
-      { to: '/movement-register', label: 'Movement Register', icon: 'M9 5l7 7-7 7', roles: [] as string[] },
+      { to: '/movement-register', label: 'Movement Register', icon: 'M9 5l7 7-7 7', roles: OPS },
       { to: '/movement-summary', label: 'Movement Summary', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', roles: ['Coordinator', 'Manager', 'Admin'] },
-      { to: '/material-transport', label: 'Material Transport', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', roles: [] as string[] },
+      { to: '/material-transport', label: 'Material Transport', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', roles: OPS },
       { to: '/travel', label: 'Travel Requests', icon: 'M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802', roles: [] as string[] },
     ],
   },
   {
     group: 'Fleet',
     items: [
-      { to: '/vehicles', label: 'Vehicles', icon: 'M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0M3 7h18M3 7l2-4h14l2 4M3 7v7a2 2 0 002 2h1m12 0h1a2 2 0 002-2V7', roles: [] as string[] },
+      { to: '/vehicles', label: 'Vehicles', icon: 'M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0M3 7h18M3 7l2-4h14l2 4M3 7v7a2 2 0 002 2h1m12 0h1a2 2 0 002-2V7', roles: OPS },
       { to: '/maintenance', label: 'Maintenance', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z', roles: ['Coordinator', 'Manager', 'Mechanic', 'Admin'] },
-      { to: '/fuel', label: 'Fuel Logs', icon: 'M13 10V3L4 14h7v7l9-11h-7z', roles: [] as string[] },
+      { to: '/fuel', label: 'Fuel Logs', icon: 'M13 10V3L4 14h7v7l9-11h-7z', roles: OPS },
     ],
   },
   {
@@ -41,7 +52,7 @@ const navGroups = [
   {
     group: 'Projects & Reports',
     items: [
-      { to: '/project-materials', label: 'Materials Status', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', roles: [] as string[] },
+      { to: '/project-materials', label: 'Materials Status', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', roles: OPS },
       { to: '/reports', label: 'Reports', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', roles: ['Manager', 'Admin'] },
       { to: '/platform-users', label: 'Platform Users', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z', roles: ['Manager', 'Admin'] },
       { to: '/departments', label: 'Departments', icon: 'M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9v.01M9 12v.01M9 15v.01M9 18v.01', roles: ['Manager', 'Admin'] },

@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { maintenanceApi, vehiclesApi, notificationsApi, apiErrorMessage } from '../../services/api'
+import {
+  maintenanceApi, vehiclesApi, notificationsApi, apiErrorMessage,
+  type MaintenanceRecord,
+} from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
 
 const STATUS_FILTER = ['', 'Scheduled', 'InProgress', 'Completed', 'Overdue']
@@ -26,9 +30,14 @@ interface NotifyModal {
 
 export default function MaintenancePage() {
   const qc = useQueryClient()
+  const { hasRole } = useAuth()
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
+  // Record open for correction. A wrongly selected plate number left the wrong
+  // vehicle carrying someone else's maintenance history, so this matters.
+  const [editing, setEditing] = useState<MaintenanceRecord | null>(null)
+  const canEdit = hasRole('Coordinator', 'Manager', 'Mechanic', 'Admin')
   const [category, setCategory] = useState('Routine')
   const [notifyModal, setNotifyModal] = useState<NotifyModal | null>(null)
   const [selectedDepts, setSelectedDepts] = useState<string[]>([])
@@ -61,6 +70,37 @@ export default function MaintenancePage() {
     mutationFn: ({ id, data }: { id: string; data: object }) => maintenanceApi.update(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['maintenance'] }); toast.success('Record updated') },
   })
+
+  const correctRecord = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) => maintenanceApi.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['maintenance'] })
+      qc.invalidateQueries({ queryKey: ['vehicles'] })
+      setEditing(null)
+      toast.success('Record corrected')
+    },
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to correct record'), { duration: 6000 }),
+  })
+
+  const handleCorrect = (e: React.FormEvent<HTMLFormElement>, id: string) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    const str = (k: string) => { const v = (fd.get(k) as string | null)?.trim(); return v ? v : undefined }
+    correctRecord.mutate({
+      id,
+      data: {
+        vehicleId: str('vehicleId'),
+        type: str('type'),
+        category: str('category'),
+        scheduledDate: str('scheduledDate'),
+        dateReturned: str('dateReturned'),
+        vendorName: str('vendorName'),
+        faultDescription: str('faultDescription'),
+        notes: str('notes'),
+        correctionReason: str('correctionReason'),
+      },
+    })
+  }
 
   // Re-send a vehicle to General Service when the original hand-off didn't land.
   const resendToGenService = useMutation({
@@ -221,6 +261,89 @@ export default function MaintenancePage() {
         </div>
       )}
 
+      {/* ── Correct a record ──────────────────────────────────────────────────
+          Most often a wrong plate number picked from the dropdown. Until this
+          existed, that record stayed against the wrong vehicle for good. */}
+      {editing && (
+        <div className="card p-5 border-l-4 border-amber-500">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-base font-semibold text-gray-900">
+              Correct Record — {editing.vehicleReg} · {editing.type}
+            </h2>
+            <button onClick={() => setEditing(null)} className="text-gray-400 hover:text-gray-600 text-sm">✕ Close</button>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            Change only what is wrong. Moving a record to a different vehicle also
+            moves it out of the first vehicle's history, so this correction is
+            recorded in the audit trail with your name.
+          </p>
+          <form onSubmit={e => handleCorrect(e, editing.id)} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="label">Vehicle <span className="text-red-500">*</span></label>
+              <select name="vehicleId" className="input" defaultValue={
+                vehicles.find(v => v.registrationNo === editing.vehicleReg)?.id ?? ''
+              }>
+                <option value="">— unchanged —</option>
+                {vehicles.map(v => (
+                  <option key={v.id} value={v.id}>{v.registrationNo} — {v.make} {v.model}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Category</label>
+              <select name="category" className="input" defaultValue={editing.category}>
+                <option value="Routine">Routine Service</option>
+                <option value="FaultRepair">Fault / Repair</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Service Type</label>
+              <select name="type" className="input" defaultValue={editing.type}>
+                <option>Oil Change</option>
+                <option>Routine Service</option>
+                <option>Tyre Replacement</option>
+                <option>Brake Service</option>
+                <option>Engine Repair</option>
+                <option>Electrical Fault</option>
+                <option>Inspection</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Date Reported</label>
+              <input name="scheduledDate" type="date" className="input" defaultValue={editing.scheduledDate} />
+            </div>
+            <div>
+              <label className="label">Date Returned</label>
+              <input name="dateReturned" type="date" className="input" defaultValue={editing.dateReturned ?? ''} />
+            </div>
+            <div>
+              <label className="label">Vendor / Workshop</label>
+              <input name="vendorName" className="input" defaultValue={editing.vendorName ?? ''} />
+            </div>
+            <div className="md:col-span-3">
+              <label className="label">Fault Description</label>
+              <input name="faultDescription" className="input" defaultValue={editing.faultDescription ?? ''} />
+            </div>
+            <div className="md:col-span-3">
+              <label className="label">Notes</label>
+              <input name="notes" className="input" defaultValue={editing.notes ?? ''} />
+            </div>
+            <div className="md:col-span-3">
+              <label className="label">Reason for correction <span className="text-red-500">*</span></label>
+              <input name="correctionReason" className="input" required
+                     placeholder="e.g. Wrong plate number selected when the record was logged" />
+            </div>
+            <div className="md:col-span-3 flex gap-3">
+              <button type="submit" className="btn-primary" disabled={correctRecord.isPending}>
+                {correctRecord.isPending ? 'Saving…' : 'Save Correction'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div className="space-y-3">
         {records.map(r => (
           <div key={r.id} className={`card p-4 ${
@@ -282,6 +405,14 @@ export default function MaintenancePage() {
                 )}
               </div>
               <div className="flex flex-col gap-2 items-end">
+                {canEdit && (
+                  <button
+                    className="text-xs text-brand-600 hover:underline"
+                    onClick={() => setEditing(editing?.id === r.id ? null : r)}
+                  >
+                    Edit
+                  </button>
+                )}
                 {/* Notify Departments button */}
                 <button
                   className="text-xs px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-300 rounded-md hover:bg-amber-100 transition-colors flex items-center gap-1"

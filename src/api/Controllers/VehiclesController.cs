@@ -35,7 +35,10 @@ public class VehiclesController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Manager,Admin")]
+    // Coordinators maintain the fleet list day to day — they are the ones told
+    // to add a vehicle to the asset register, so requiring a manager for it just
+    // turns a two-minute job into an email.
+    [Authorize(Roles = "Coordinator,Manager,Admin")]
     public async Task<ActionResult<VehicleDto>> Create(CreateVehicleDto dto)
     {
         if (await db.Vehicles.AnyAsync(v => v.RegistrationNo == dto.RegistrationNo))
@@ -67,7 +70,7 @@ public class VehiclesController(AppDbContext db) : ControllerBase
     }
 
     [HttpPatch("{id:guid}")]
-    [Authorize(Roles = "Manager,Admin,Mechanic")]
+    [Authorize(Roles = "Coordinator,Manager,Admin,Mechanic")]
     public async Task<IActionResult> Update(Guid id, UpdateVehicleDto dto)
     {
         var vehicle = await db.Vehicles.FindAsync(id);

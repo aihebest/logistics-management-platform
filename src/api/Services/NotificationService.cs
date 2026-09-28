@@ -29,6 +29,11 @@ public interface INotificationService
     // ── Maintenance ─────────────────────────────────────────────────────────────
     Task SendVehicleServiceDueAsync(Vehicle vehicle, int daysUntilDue);
 
+    /// <summary>
+    /// Tells Security about an approved trip, once a driver and vehicle are on it.
+    /// </summary>
+    Task SendSecurityTransportAlertAsync(TripRequest trip);
+
     // ── Travel Request Form ─────────────────────────────────────────────────────
     /// <summary>Pass the department's head, or null to fall back to all HODs.</summary>
     Task SendTravelRequestSubmittedAsync(TravelRequest request, User? hod);
@@ -330,6 +335,76 @@ public class NotificationService(
         logger.LogInformation("Service due reminder sent: {Vehicle} — {Days} days", vehicle.RegistrationNo, daysUntilDue);
     }
 
+    /// <summary>
+    /// Tells Security about an approved trip.
+    ///
+    /// Sent at approval rather than submission, because that is when the movement
+    /// becomes real and carries the details a gate actually needs — vehicle,
+    /// driver, destination and times. Alerting at submission would also announce
+    /// trips that are later rejected or cancelled.
+    ///
+    /// Goes to the head of the Security department and its active members, so
+    /// gate staff are covered rather than just the head.
+    /// </summary>
+    public async Task SendSecurityTransportAlertAsync(TripRequest trip)
+    {
+        var security = await db.Departments
+            .Include(d => d.Hod)
+            .FirstOrDefaultAsync(d => d.Name == "Security" && d.IsActive);
+
+        if (security == null)
+        {
+            logger.LogWarning(
+                "Trip {TripId} approved but there is no active Security department, so Security was not told",
+                trip.Id);
+            return;
+        }
+
+        var recipients = await db.Users
+            .Where(u => u.IsActive
+                     && u.Email != null && u.Email != ""
+                     && (u.DepartmentId == security.Id || u.Id == security.HodUserId))
+            .Select(u => u.Email!)
+            .Distinct()
+            .ToListAsync();
+
+        if (recipients.Count == 0)
+        {
+            logger.LogWarning(
+                "Trip {TripId} approved but no one in Security has an email address on the platform. " +
+                "Assign a head on the Departments screen, or set people's department under Platform Users.",
+                trip.Id);
+            return;
+        }
+
+        var a       = trip.Assignment;
+        var ref_    = trip.Id.ToString()[..8].ToUpper();
+        var depart  = trip.DepartureDate.HasValue
+            ? $"{trip.DepartureDate:dd MMM yyyy}{(string.IsNullOrWhiteSpace(trip.DepartureTime) ? "" : $" at {trip.DepartureTime}")}"
+            : "Not stated";
+
+        var subject = $"Vehicle Movement Approved — {a?.Vehicle?.RegistrationNo ?? "vehicle TBC"} ({ref_})";
+        var body    = $"""
+            A vehicle movement has been approved. Details for your records:
+
+            Ref:          {ref_}
+            Vehicle:      {a?.Vehicle?.RegistrationNo ?? "To be confirmed"}
+            Driver:       {a?.Driver?.FullName ?? "To be confirmed"}
+            Departure:    {depart}
+            From:         {trip.PickupLocation}
+            To:           {trip.DestinationLocation}
+            Movement:     {trip.MovementType}
+            Purpose:      {trip.Purpose}
+            Personnel:    {trip.PersonnelCount}
+            {(string.IsNullOrWhiteSpace(trip.PersonnelNames) ? "" : $"Travelling:   {trip.PersonnelNames}\n")}{(trip.HasMaterials ? $"Materials:    {trip.MaterialDescription ?? "Yes"}\n" : "")}Requested by: {trip.RequestedBy?.FullName ?? "—"}
+
+            {PlatformUrl()}
+            """;
+
+        await SendEmailToManyAsync(recipients, subject, body);
+        logger.LogInformation("Security notified of approved trip {Ref} — {Count} recipient(s)", ref_, recipients.Count);
+    }
+
     // ── Travel Request Form (DEL-LG-FRM-002) ────────────────────────────────────
 
     /// <summary>
@@ -519,7 +594,43 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        await SendToRolesAsync(subject, body, "Coordinator", "Manager");
+        // Who needs this: the people who book the travel. Role alone was not
+        // enough — the travel coordinator sits in the Logistics department but
+        // does not necessarily hold the Coordinator role, so a role-only list
+        // silently skipped exactly the person who acts on the form. Everyone in
+        // Logistics is included, plus the head who verified it.
+        var recipients = await GetEmailsForRolesAsync("Coordinator", "Manager");
+
+        var logisticsTeam = await db.Users
+            .Where(u => u.IsActive
+                     && u.Email != null && u.Email != ""
+                     && u.Department != null && u.Department.Name == "Logistics")
+            .Select(u => u.Email!)
+            .ToListAsync();
+
+        recipients = recipients.Concat(logisticsTeam).ToList();
+
+        if (request.VerifiedBy?.Email is { Length: > 0 } verifierEmail)
+            recipients.Add(verifierEmail);
+
+        recipients = recipients.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        if (recipients.Count == 0)
+        {
+            logger.LogWarning(
+                "Travel request {Form} approved but nobody could be notified — no Coordinator or Manager " +
+                "holds an email address and the Logistics department has no members. Check Platform Users.",
+                request.FormNumber);
+        }
+        else
+        {
+            await SendEmailToManyAsync(recipients, subject, body);
+            // Recipients are logged so a future 'nobody was told' report can be
+            // answered from the log rather than by reproducing the approval.
+            logger.LogInformation(
+                "Travel request {Form} approval notification sent to {Count} recipient(s): {Recipients}",
+                request.FormNumber, recipients.Count, string.Join(", ", recipients));
+        }
 
         if (request.RequestedBy?.Email is { Length: > 0 } requesterEmail)
         {

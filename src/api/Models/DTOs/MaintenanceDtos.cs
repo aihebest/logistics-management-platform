@@ -54,15 +54,24 @@ public record CreateMaintenanceRecordDto(
 );
 
 public record UpdateMaintenanceRecordDto(
-    string? Status,
-    DateOnly? CompletedDate,
-    DateOnly? DateReturned,
-    decimal? Cost,
-    string? VendorName,
-    string? Notes,
-    string? AttachmentBlobUrl,
-    string? PartsReplaced,
-    string? RepairRemarks
+    string? Status = null,
+    DateOnly? CompletedDate = null,
+    DateOnly? DateReturned = null,
+    decimal? Cost = null,
+    string? VendorName = null,
+    string? Notes = null,
+    string? AttachmentBlobUrl = null,
+    string? PartsReplaced = null,
+    string? RepairRemarks = null,
+    // Corrections — a record raised against the wrong plate number was
+    // previously impossible to fix, leaving a vehicle with maintenance history
+    // that was never its own.
+    Guid? VehicleId = null,
+    string? Type = null,
+    string? Category = null,
+    DateOnly? ScheduledDate = null,     // shown to users as "Date Reported"
+    string? FaultDescription = null,
+    string? CorrectionReason = null     // recorded in the audit trail
 );
 
 // ── Fuel Logs ─────────────────────────────────────────────────────────────────

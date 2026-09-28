@@ -264,6 +264,19 @@ public class TripRequestsController(
             .Include(x => x.Assignment).ThenInclude(a => a!.Vehicle)
             .FirstAsync(x => x.Id == id);
 
+        // Security are told once the movement is real and has a vehicle and
+        // driver on it — that is what a gate needs. Handled here rather than in
+        // each branch above so the manual and auto-assignment paths behave the
+        // same. A notification failure must never undo an approval.
+        if (result.Status == "Active" && result.Assignment != null)
+        {
+            try { await notifications.SendSecurityTransportAlertAsync(result); }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Security notification failed for approved trip {TripId} — the approval stands", id);
+            }
+        }
+
         return Ok(ToDto(result));
     }
 

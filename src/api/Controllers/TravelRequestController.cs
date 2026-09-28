@@ -237,6 +237,9 @@ public class TravelRequestController(
 
         request.Status            = "PendingApproval";
         request.VerifiedById      = caller.Id;
+        // Navigation as well as the id — the notification prints the verifier's
+        // name, and the id alone would leave it blank.
+        request.VerifiedBy        = caller;
         request.VerifiedAt        = DateTime.UtcNow;
         request.VerificationNotes = Trim(dto?.Notes);
         request.UpdatedAt         = DateTime.UtcNow;
@@ -306,6 +309,9 @@ public class TravelRequestController(
 
         request.Status        = "Approved";
         request.ApprovedById  = caller.Id;
+        // Set the navigation too, not just the id — the notification prints the
+        // approver's name, and without this it would read "—" on every mail.
+        request.ApprovedBy    = caller;
         request.ApprovedAt    = DateTime.UtcNow;
         request.ApprovalNotes = Trim(dto?.Notes);
         request.UpdatedAt     = DateTime.UtcNow;
