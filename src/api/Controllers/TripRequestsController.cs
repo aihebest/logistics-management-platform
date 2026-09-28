@@ -29,6 +29,16 @@ public class TripRequestsController(
             .Include(t => t.Assignment).ThenInclude(a => a!.Vehicle)
             .AsQueryable();
 
+        // Ordinary staff now land on this page and see nothing else, so it must
+        // not show them every trip in the company — names, destinations and
+        // times. They see their own; the people who run operations see all.
+        if (!SeesAllTrips())
+        {
+            var caller = await currentUser.ResolveOrProvisionAsync(User);
+            if (caller == null) return [];
+            query = query.Where(t => t.RequestedById == caller.Id);
+        }
+
         if (!string.IsNullOrEmpty(status))
             query = query.Where(t => t.Status == status);
 
@@ -49,8 +59,27 @@ public class TripRequestsController(
             .Include(x => x.Assignment).ThenInclude(a => a!.Driver)
             .Include(x => x.Assignment).ThenInclude(a => a!.Vehicle)
             .FirstOrDefaultAsync(x => x.Id == id);
-        return t == null ? NotFound() : ToDto(t);
+        if (t == null) return NotFound();
+
+        if (!SeesAllTrips())
+        {
+            var caller = await currentUser.ResolveOrProvisionAsync(User);
+            if (caller == null || t.RequestedById != caller.Id)
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    error = "You can only view trip requests you raised."
+                });
+        }
+
+        return ToDto(t);
     }
+
+    /// <summary>
+    /// Operations staff, management and heads of department see every trip —
+    /// they approve, assign or oversee them. Everyone else sees only their own.
+    /// </summary>
+    private bool SeesAllTrips() =>
+        User.IsOperationsStaff() || User.HasAnyRole("Management", "HOD", "Mechanic");
 
     [HttpPost]
     public async Task<ActionResult<TripRequestDto>> Create(CreateTripRequestDto dto)

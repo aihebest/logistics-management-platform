@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { tripsApi, driversApi, vehiclesApi, apiErrorMessage } from '../../services/api'
+import { tripsApi, driversApi, vehiclesApi, authApi, apiErrorMessage } from '../../services/api'
 import { useAuth } from '../../auth/useAuth'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -71,6 +71,8 @@ export default function TripRequestsPage() {
   const [approvingId, setApprovingId] = useState<string | null>(null)
 
   const canApprove = hasRole('Coordinator', 'Manager', 'Admin')
+  // Who is signed in — so Cancel is only offered on requests they raised.
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: authApi.me })
 
   // Only loaded for approvers — drivers/vehicles endpoints are role-restricted.
   const { data: drivers = [] } = useQuery({
@@ -394,7 +396,8 @@ export default function TripRequestsPage() {
                 </p>
                 <p className="text-xs text-gray-400 mt-1">
                   Requested by {t.requestedByName} · {format(new Date(t.requestedDateTime), 'PPp')}
-                  {t.departureDate && ` · Departs: ${t.departureDate}${t.departureTime ? ` at ${t.departureTime}` : ''}`}
+                  {/* Time arrives as "07:00:00" — trim the seconds nobody entered. */}
+                  {t.departureDate && ` · Departs: ${t.departureDate}${t.departureTime ? ` at ${t.departureTime.slice(0, 5)}` : ''}`}
                 </p>
                 {/* Who and what is travelling — approvers need this before deciding. */}
                 <p className="text-xs text-gray-500 mt-1">
@@ -432,7 +435,10 @@ export default function TripRequestsPage() {
                     </button>
                   </>
                 )}
-                {(t.status === 'Pending' || t.status === 'Approved' || t.status === 'Active') && (
+                {/* Only the requester or operations staff may cancel — the server
+                    refuses anyone else, so don't offer the button to them. */}
+                {(t.status === 'Pending' || t.status === 'Approved' || t.status === 'Active')
+                  && (canApprove || t.requestedById === me?.id) && (
                   <button
                     className="btn-secondary text-xs"
                     onClick={() => cancelTrip.mutate(t.id)}

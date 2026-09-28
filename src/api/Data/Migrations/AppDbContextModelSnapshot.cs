@@ -168,6 +168,7 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<string>("PhoneNumber").HasMaxLength(20).HasColumnType("nvarchar(20)");
                 b.Property<string>("Role").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)");
                 b.Property<Guid?>("DepartmentId").HasColumnType("uniqueidentifier");
+                b.Property<string>("AppRoles").HasMaxLength(200).HasColumnType("nvarchar(200)");
                 b.Property<string>("Position").HasMaxLength(100).HasColumnType("nvarchar(100)");
                 b.HasKey("Id");
                 b.HasIndex("Email").IsUnique().HasFilter("[Email] IS NOT NULL AND [Email] <> ''");

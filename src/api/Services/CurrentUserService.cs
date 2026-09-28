@@ -102,6 +102,9 @@ public class CurrentUserService(AppDbContext db, ILogger<CurrentUserService> log
             FullName      = fullName,
             Email         = email,
             Role          = role,
+            AppRoles      = principal.GetAppRoles().Count == 0
+                              ? null
+                              : "," + string.Join(",", principal.GetAppRoles().OrderBy(r => r, StringComparer.Ordinal)) + ",",
             // Only actual drivers carry a duty status.
             DriverStatus  = role == "Driver" ? "OffDuty" : null,
             IsActive      = true,
@@ -138,6 +141,10 @@ public class CurrentUserService(AppDbContext db, ILogger<CurrentUserService> log
         var roles = principal.GetAppRoles();
         return roles.Contains("Admin")       ? "Admin"
              : roles.Contains("Manager")     ? "Manager"
+             // Management (DMD, directors) was missing here, so anyone holding
+             // only that role was recorded as Staff and never received a travel
+             // approval email.
+             : roles.Contains("Management")  ? "Management"
              // HOD approves material transport at stage 1, before GM Logistics.
              : roles.Contains("HOD")         ? "HOD"
              : roles.Contains("Coordinator") ? "Coordinator"
@@ -159,13 +166,26 @@ public class CurrentUserService(AppDbContext db, ILogger<CurrentUserService> log
         var roles = principal.GetAppRoles();
         if (roles.Count == 0) return user;      // nothing authoritative to apply
 
-        var desired = RoleFromToken(principal);
-        if (desired == "Staff" || desired == user.Role) return user;
+        var changed = false;
 
-        logger.LogInformation("Role sync for {Email}: {Old} → {New}", user.Email, user.Role, desired);
-        user.Role = desired;
-        if (desired == "Driver") user.DriverStatus ??= "OffDuty";
-        await db.SaveChangesAsync();
+        // The full set, so someone holding two roles gets the emails for both.
+        var allRoles = "," + string.Join(",", roles.OrderBy(r => r, StringComparer.Ordinal)) + ",";
+        if (user.AppRoles != allRoles)
+        {
+            user.AppRoles = allRoles;
+            changed = true;
+        }
+
+        var desired = RoleFromToken(principal);
+        if (desired != "Staff" && desired != user.Role)
+        {
+            logger.LogInformation("Role sync for {Email}: {Old} → {New}", user.Email, user.Role, desired);
+            user.Role = desired;
+            if (desired == "Driver") user.DriverStatus ??= "OffDuty";
+            changed = true;
+        }
+
+        if (changed) await db.SaveChangesAsync();
         return user;
     }
 }

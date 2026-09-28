@@ -50,6 +50,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .HasFilter("[Email] IS NOT NULL AND [Email] <> ''");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
             e.Property(x => x.Position).HasMaxLength(100);
+            e.Property(x => x.AppRoles).HasMaxLength(200);
             // Closing a department must not delete its people.
             e.HasOne(x => x.Department).WithMany(d => d.Members)
              .HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.SetNull);

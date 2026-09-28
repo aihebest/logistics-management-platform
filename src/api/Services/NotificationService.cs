@@ -1112,13 +1112,27 @@ public class NotificationService(
         await SendEmailToManyAsync(all, subject, body);
     }
 
+    /// <summary>
+    /// Everyone holding any of the given roles — as their primary role, or as
+    /// one of several they hold in Entra. Matching on the full set is what lets
+    /// the head of Logistics receive both logistics-manager and travel-approval
+    /// mail.
+    /// </summary>
     private async Task<List<string>> GetEmailsForRolesAsync(params string[] roles)
     {
-        return await db.Users
-            .Where(u => u.IsActive && roles.Contains(u.Role) && u.Email != null && u.Email != "")
-            .Select(u => u.Email!)
-            .Distinct()
+        var users = await db.Users
+            .Where(u => u.IsActive && u.Email != null && u.Email != "")
+            .Select(u => new { u.Email, u.Role, u.AppRoles })
             .ToListAsync();
+
+        // Filtered in memory: a few hundred users at most, and it keeps the
+        // whole-word matching exact rather than relying on SQL LIKE patterns.
+        return users
+            .Where(u => roles.Contains(u.Role)
+                     || (u.AppRoles != null && roles.Any(r => u.AppRoles.Contains("," + r + ","))))
+            .Select(u => u.Email!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private string PlatformUrl()

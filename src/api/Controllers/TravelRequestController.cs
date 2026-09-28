@@ -281,7 +281,9 @@ public class TravelRequestController(
             // If nobody else holds Management, this request has nowhere to go —
             // say so, rather than leaving them to work it out from a bare refusal.
             var otherApprovers = await db.Users
-                .CountAsync(u => u.Role == "Management" && u.IsActive && u.Id != caller.Id);
+                .CountAsync(u => u.IsActive && u.Id != caller.Id
+                              && (u.Role == "Management"
+                                  || (u.AppRoles != null && u.AppRoles.Contains(",Management,"))));
 
             logger.LogWarning(
                 "{Email} attempted to approve their own travel request {Form}; {Count} other Management user(s) available",
