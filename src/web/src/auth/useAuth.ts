@@ -31,10 +31,10 @@ export function useAuth() {
     ? ((account.idTokenClaims as Record<string, unknown>)?.roles as AppRole[] | undefined) ?? []
     : []
 
-  // Fallback: decode roles from the access token.
-  // This handles the case where a role was assigned AFTER the user first logged in
-  // (the cached ID token won't include the newly-assigned role, but the access token will).
-  const [accessTokenRoles, setAccessTokenRoles] = useState<AppRole[]>([])
+  // Roles from the access token — the same token the API checks, so it is the
+  // one to believe. Fetched in the background, hence null until it arrives.
+  const [accessTokenRoles, setAccessTokenRoles] = useState<AppRole[] | null>(null)
+  const [tokenCheckDone, setTokenCheckDone] = useState(false)
 
   useEffect(() => {
     if (!account) return
@@ -42,15 +42,22 @@ export function useAuth() {
       .acquireTokenSilent({ scopes: apiScopes, account })
       .then(result => {
         const payload = decodeJwtPayload(result.accessToken)
-        const tokenRoles = (payload.roles as AppRole[] | undefined) ?? []
-        setAccessTokenRoles(tokenRoles)
+        setAccessTokenRoles((payload.roles as AppRole[] | undefined) ?? [])
       })
-      .catch(() => { /* Silent refresh failed — user will need to log in again */ })
+      .catch(() => { /* Silent refresh failed — fall back to the cached ID token */ })
+      .finally(() => setTokenCheckDone(true))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account?.homeAccountId])
 
-  // Prefer ID token roles; fall back to decoded access token roles
-  const roles: AppRole[] = idTokenRoles.length > 0 ? idTokenRoles : accessTokenRoles
+  // Once the access token is in, it wins. The cached ID token can be days old
+  // and still carry roles someone has since gained or lost — preferring it is
+  // why a role changed in Entra took so long to show up.
+  const roles: AppRole[] = accessTokenRoles ?? idTokenRoles
+
+  // Nothing should decide access before the roles are known. Route guards
+  // checked too early, saw no roles, and bounced everyone — Admin included —
+  // back to Trip Requests, even though the menu then showed the right items.
+  const rolesReady = !account || tokenCheckDone
 
   const hasRole = (...check: AppRole[]) => check.some(r => roles.includes(r))
 
@@ -66,6 +73,7 @@ export function useAuth() {
   return {
     account,
     roles,
+    rolesReady,
     hasRole,
     getToken,
     login,
