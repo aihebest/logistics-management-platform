@@ -38,6 +38,8 @@ public interface INotificationService
     /// <summary>Pass the department's head, or null to fall back to all HODs.</summary>
     Task SendTravelRequestSubmittedAsync(TravelRequest request, User? hod);
     Task SendTravelRequestVerifiedAsync(TravelRequest request);
+    /// <summary>A director's travel, to the MD — or the DMD when the MD is travelling.</summary>
+    Task SendExecutiveTravelForApprovalAsync(TravelRequest request, User? approver);
     Task SendTravelRequestApprovedAsync(TravelRequest request);
     Task SendTravelRequestRejectedAsync(TravelRequest request, string rejectedByName);
     Task SendMaintenanceOverdueAsync(MaintenanceRecord record);
@@ -563,6 +565,66 @@ public class NotificationService(
         }
 
         logger.LogInformation("Travel request {Form} verified notifications sent", request.FormNumber);
+    }
+
+    /// <summary>
+    /// A director's travel request, sent to its one named approver. Falls back
+    /// to all of management — with a warning — if the MD or DMD isn't assigned
+    /// on the Departments screen yet, so the request is never left unseen.
+    /// </summary>
+    public async Task SendExecutiveTravelForApprovalAsync(TravelRequest request, User? approver)
+    {
+        var subject = $"Director Travel for Approval — {request.FormNumber} ({TravellerName(request)})";
+        var body    = $"""
+            A director's travel request needs your approval.
+
+            Form No:     {request.FormNumber}
+            Traveller:   {TravellerName(request)}
+            Position:    {request.Position ?? "Not stated"}
+            Journey:     {TravelSummary(request)}
+            Purpose:     {request.PurposeOfTravel}
+            Hotel:       {(request.HotelBookingRequired ? "Required" : "Not required")}
+            Cost Centre: {request.ProjectCostCentreCode ?? "Not stated"}
+
+            Directors' travel has no head-of-department verification, so your
+            approval is the sign-off on this form.
+
+            {PlatformUrl()}
+            """;
+
+        if (approver is { Email.Length: > 0 })
+        {
+            await SendEmailAsync(approver.Email, subject, body);
+            await NotifyInAppAsync(approver.Id, "TravelRequestForApproval", subject,
+                $"{TravellerName(request)} — {TravelSummary(request)}",
+                "TravelRequest", request.Id.ToString());
+            logger.LogInformation("Executive travel {Form} sent to {Email} for approval",
+                request.FormNumber, approver.Email);
+        }
+        else
+        {
+            logger.LogWarning(
+                "Executive travel {Form}: no MD/DMD assigned to Executive Management, so it has gone to " +
+                "all of management. Assign them on the Departments screen.", request.FormNumber);
+            await SendToRolesAsync(subject, body, "Management");
+        }
+
+        if (request.RequestedBy?.Email is { Length: > 0 } requesterEmail)
+        {
+            await SendEmailAsync(requesterEmail,
+                $"Travel Request Submitted — {request.FormNumber}",
+                $"""
+                Hi {request.RequestedBy.FullName},
+
+                The travel request has been submitted for approval by
+                {approver?.FullName ?? "management"}.
+
+                Form No:  {request.FormNumber}
+                Journey:  {TravelSummary(request)}
+
+                {PlatformUrl()}
+                """);
+        }
     }
 
     /// <summary>

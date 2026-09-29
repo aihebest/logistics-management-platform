@@ -68,12 +68,16 @@ export default function DepartmentsPage() {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     const hod = fd.get('hodUserId') as string
+    // Only present on the executive department's form.
+    const deputy = fd.get('deputyHodUserId') as string | null
     update.mutate({
       id,
       data: {
         name: (fd.get('name') as string)?.trim() || undefined,
         hodUserId: hod || undefined,
         clearHod: hod === '' ? true : undefined,
+        deputyHodUserId: deputy || undefined,
+        clearDeputy: deputy === '' ? true : undefined,
         isActive: fd.get('isActive') === 'Active',
       },
     })
@@ -148,15 +152,27 @@ export default function DepartmentsPage() {
               <input name="name" className="input" defaultValue={editing.name} />
             </div>
             <div>
-              <label className="label">Head of Department</label>
+              <label className="label">{editing.isExecutive ? 'Head (MD)' : 'Head of Department'}</label>
               <select name="hodUserId" className="input" defaultValue={editing.hodUserId ?? ''}>
                 <option value="">No head assigned</option>
                 {hods.map(h => <option key={h.id} value={h.id}>{h.fullName} — {h.role}</option>)}
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                One person can head more than one department.
+                {editing.isExecutive
+                  ? "Approves directors' travel."
+                  : 'One person can head more than one department.'}
               </p>
             </div>
+            {editing.isExecutive && (
+              <div>
+                <label className="label">Deputy (DMD)</label>
+                <select name="deputyHodUserId" className="input" defaultValue={editing.deputyHodUserId ?? ''}>
+                  <option value="">No deputy assigned</option>
+                  {hods.map(h => <option key={h.id} value={h.id}>{h.fullName} — {h.role}</option>)}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Approves the MD's own travel.</p>
+              </div>
+            )}
             <div>
               <label className="label">Status</label>
               <select name="isActive" className="input" defaultValue={editing.isActive ? 'Active' : 'Inactive'}>
@@ -189,6 +205,11 @@ export default function DepartmentsPage() {
                   <td className="px-4 py-3 font-medium text-gray-900">{d.name}</td>
                   <td className="px-4 py-3 text-gray-700">
                     {d.hodName ?? <span className="text-amber-600 italic">not assigned</span>}
+                    {d.isExecutive && (
+                      <span className="block text-xs text-gray-500">
+                        MD · Deputy (DMD): {d.deputyHodName ?? <span className="text-amber-600 italic">not assigned</span>}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-500">{d.hodEmail ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500 tabular-nums">{d.memberCount}</td>

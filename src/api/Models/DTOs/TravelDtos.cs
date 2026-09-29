@@ -9,7 +9,11 @@ public record DepartmentDto(
     string? HodName,
     string? HodEmail,
     bool IsActive,
-    int MemberCount
+    int MemberCount,
+    // Executive department only: the head is the MD, the deputy the DMD.
+    bool IsExecutive = false,
+    Guid? DeputyHodUserId = null,
+    string? DeputyHodName = null
 );
 
 public record CreateDepartmentDto(string Name, Guid? HodUserId = null);
@@ -18,7 +22,9 @@ public record UpdateDepartmentDto(
     string? Name = null,
     Guid? HodUserId = null,
     bool? ClearHod = null,      // set true to remove the head without naming a new one
-    bool? IsActive = null
+    bool? IsActive = null,
+    Guid? DeputyHodUserId = null,
+    bool? ClearDeputy = null
 );
 
 // ── Travel Request Form (DEL-LG-FRM-002 Rev 07) ───────────────────────────────

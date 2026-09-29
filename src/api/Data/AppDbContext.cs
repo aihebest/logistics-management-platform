@@ -282,6 +282,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // with them, so clear the link rather than blocking the delete.
             e.HasOne(x => x.Hod).WithMany()
              .HasForeignKey(x => x.HodUserId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(x => x.DeputyHod).WithMany()
+             .HasForeignKey(x => x.DeputyHodUserId).OnDelete(DeleteBehavior.NoAction);
         });
 
         mb.Entity<TravelRequestLeg>(e =>

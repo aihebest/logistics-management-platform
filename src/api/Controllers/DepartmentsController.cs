@@ -30,9 +30,11 @@ public class DepartmentsController(
     [HttpGet]
     public async Task<IEnumerable<DepartmentDto>> GetAll([FromQuery] bool includeInactive = false)
     {
-        var q = db.Departments.Include(d => d.Hod).AsQueryable();
+        var q = db.Departments.Include(d => d.Hod).Include(d => d.DeputyHod).AsQueryable();
         if (!includeInactive) q = q.Where(d => d.IsActive);
 
+        // Every argument passed explicitly — optional parameters aren't allowed
+        // inside a query EF has to translate.
         return await q.OrderBy(d => d.Name)
             .Select(d => new DepartmentDto(
                 d.Id,
@@ -41,7 +43,10 @@ public class DepartmentsController(
                 d.Hod != null ? d.Hod.FullName : null,
                 d.Hod != null ? d.Hod.Email : null,
                 d.IsActive,
-                d.Members.Count(m => m.IsActive)))
+                d.Members.Count(m => m.IsActive),
+                d.IsExecutive,
+                d.DeputyHodUserId,
+                d.DeputyHod != null ? d.DeputyHod.FullName : null))
             .ToListAsync();
     }
 
@@ -123,6 +128,27 @@ public class DepartmentsController(
             department.HodUserId = null;
         }
 
+        if (dto.DeputyHodUserId.HasValue)
+        {
+            var deputy = await db.Users.FindAsync(dto.DeputyHodUserId.Value);
+            if (deputy == null) return BadRequest(new { error = "That user was not found." });
+            if (string.IsNullOrWhiteSpace(deputy.Email))
+                return BadRequest(new { error = $"{deputy.FullName} has no email address on the platform, so they could not be notified." });
+            if (deputy.Id == (dto.HodUserId ?? department.HodUserId))
+                return BadRequest(new { error = "The deputy must be a different person from the head — the deputy approves the head's own travel." });
+
+            var previousDeputy = department.DeputyHodUserId.HasValue
+                ? (await db.Users.FindAsync(department.DeputyHodUserId.Value))?.FullName ?? "none"
+                : "none";
+            changes.Add($"Deputy: {previousDeputy} → {deputy.FullName}");
+            department.DeputyHodUserId = deputy.Id;
+        }
+        else if (dto.ClearDeputy == true && department.DeputyHodUserId != null)
+        {
+            changes.Add("Deputy: cleared");
+            department.DeputyHodUserId = null;
+        }
+
         if (dto.IsActive.HasValue && dto.IsActive.Value != department.IsActive)
         {
             changes.Add($"Active: {department.IsActive} → {dto.IsActive.Value}");
@@ -141,9 +167,10 @@ public class DepartmentsController(
 
     private async Task<DepartmentDto> ToDtoAsync(Guid id)
     {
-        var d = await db.Departments.Include(x => x.Hod).FirstAsync(x => x.Id == id);
+        var d = await db.Departments.Include(x => x.Hod).Include(x => x.DeputyHod).FirstAsync(x => x.Id == id);
         return new DepartmentDto(
             d.Id, d.Name, d.HodUserId, d.Hod?.FullName, d.Hod?.Email, d.IsActive,
-            await db.Users.CountAsync(u => u.DepartmentId == d.Id && u.IsActive));
+            await db.Users.CountAsync(u => u.DepartmentId == d.Id && u.IsActive),
+            d.IsExecutive, d.DeputyHodUserId, d.DeputyHod?.FullName);
     }
 }

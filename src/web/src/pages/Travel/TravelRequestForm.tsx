@@ -16,6 +16,8 @@ import type { TravelRequest, TravelLeg } from '../../services/api'
 
 interface Props {
   request: TravelRequest
+  /** Directors' travel — no head-of-department verification stage. */
+  executive?: boolean
   onClose: () => void
 }
 
@@ -56,7 +58,7 @@ function SignatureBlock({
   )
 }
 
-export default function TravelRequestForm({ request: r, onClose }: Props) {
+export default function TravelRequestForm({ request: r, executive = false, onClose }: Props) {
   const outbound = padRows(r.legs, 'Outbound')
   const inbound  = padRows(r.legs, 'Inbound')
   const isApproved = r.status === 'Approved'
@@ -301,9 +303,11 @@ export default function TravelRequestForm({ request: r, onClose }: Props) {
                 at={r.verifiedAt}
                 notes={r.verificationNotes}
                 placeholder={
-                  r.status === 'PendingVerification'
-                    ? 'Awaiting verification by Head of Department'
-                    : 'Not required — raised by the Head of Department'
+                  executive
+                    ? "Not required — director's travel"
+                    : r.status === 'PendingVerification'
+                      ? 'Awaiting verification by Head of Department'
+                      : 'Not required — raised by the Head of Department'
                 }
               />
               <SignatureBlock

@@ -67,6 +67,21 @@ export default function TravelRequestPage() {
   // they also approve travel, so a role check alone would hide Verify from them.
   const headsADepartment = !!me && departments.some(d => d.hodUserId === me.id)
   const canVerify  = hasRole('HOD', 'Admin') || headsADepartment
+
+  /**
+   * Directors' travel has one named approver — the MD, or the DMD when the MD
+   * is the one travelling — so only that person sees Approve on it. Mirrors
+   * ExecutiveApproverId in TravelRequestController.
+   */
+  const isExecutive = (r: TravelRequest) =>
+    departments.some(d => d.name === r.department && d.isExecutive)
+
+  const mayApprove = (r: TravelRequest) => {
+    const dept = departments.find(d => d.name === r.department)
+    if (!dept?.isExecutive) return true
+    const approverId = dept.hodUserId === r.requestedById ? dept.deputyHodUserId : dept.hodUserId
+    return !approverId || approverId === me?.id
+  }
   const canApprove = hasRole('Management', 'Admin')
 
   const refresh = () => {
@@ -131,7 +146,13 @@ export default function TravelRequestPage() {
     <div className="space-y-4">
       {/* The replica is the only thing that prints; everything else is hidden
           by the print rules in TravelRequestForm. */}
-      {printing && <TravelRequestForm request={printing} onClose={() => setPrinting(null)} />}
+      {printing && (
+        <TravelRequestForm
+          request={printing}
+          executive={isExecutive(printing)}
+          onClose={() => setPrinting(null)}
+        />
+      )}
 
       <div className="no-print space-y-4">
         <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
@@ -235,7 +256,7 @@ export default function TravelRequestPage() {
                   {/* Whoever verified a request cannot also approve it — two
                       signatures mean two people. Hidden here as well as blocked
                       server-side, so nobody clicks into a refusal. */}
-                  {canApprove && r.status === 'PendingApproval' && r.verifiedByName !== me?.fullName && (
+                  {canApprove && r.status === 'PendingApproval' && r.verifiedByName !== me?.fullName && mayApprove(r) && (
                     <>
                       <button
                         className="btn-primary text-xs"

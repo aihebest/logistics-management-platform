@@ -398,6 +398,10 @@ export interface Department {
   hodEmail?: string
   isActive: boolean
   memberCount: number
+  /** Executive Management: the head is the MD, the deputy the DMD. */
+  isExecutive: boolean
+  deputyHodUserId?: string
+  deputyHodName?: string
 }
 
 /** One row of the Outbound or Inbound routing table on the TRF. */

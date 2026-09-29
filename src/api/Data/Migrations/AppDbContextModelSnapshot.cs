@@ -182,6 +182,8 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");
                 b.Property<string>("Name").IsRequired().HasMaxLength(150).HasColumnType("nvarchar(150)");
                 b.Property<Guid?>("HodUserId").HasColumnType("uniqueidentifier");
+                b.Property<Guid?>("DeputyHodUserId").HasColumnType("uniqueidentifier");
+                b.Property<bool>("IsExecutive").HasColumnType("bit");
                 b.Property<bool>("IsActive").HasColumnType("bit");
                 b.Property<DateTime>("CreatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
                 b.HasKey("Id");

@@ -131,7 +131,11 @@ public class TravelRequestController(
         // the right and sufficient approver. Without this the request would be
         // raised, emailed to the requester to verify, and then refused — stuck.
         var raisedByTheHead = department.HodUserId == caller.Id;
-        request.Status = raisedByTheHead ? "PendingApproval" : "PendingVerification";
+
+        // Directors' travel (the Executive Management department) has no
+        // verification stage either — directors are the heads — and goes to a
+        // named approver rather than management generally.
+        request.Status = raisedByTheHead || department.IsExecutive ? "PendingApproval" : "PendingVerification";
 
         var outboundSeq = 0;
         var inboundSeq  = 0;
@@ -161,7 +165,13 @@ public class TravelRequestController(
         // Notification failures must never lose a submitted form.
         try
         {
-            if (raisedByTheHead)
+            if (department.IsExecutive)
+            {
+                var approverId = ExecutiveApproverId(department, request.RequestedById);
+                var approver = approverId.HasValue ? await db.Users.FindAsync(approverId.Value) : null;
+                await notifications.SendExecutiveTravelForApprovalAsync(request, approver);
+            }
+            else if (raisedByTheHead)
                 await notifications.SendTravelRequestVerifiedAsync(request);   // straight to management
             else
                 await NotifyVerifierAsync(request, department);
@@ -309,6 +319,26 @@ public class TravelRequestController(
                         "someone else. Any other member of management can approve it."
             });
 
+        // Directors' travel has a named approver: the MD, or the DMD when the MD
+        // is the one travelling. Other members of management — including heads
+        // who also approve staff travel — must not sign off their directors'.
+        var requestDepartment = await db.Departments.FirstOrDefaultAsync(d => d.Name == request.Department);
+        if (requestDepartment?.IsExecutive == true)
+        {
+            var approverId = ExecutiveApproverId(requestDepartment, request.RequestedById);
+            if (approverId.HasValue && approverId.Value != caller.Id)
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    error = "Directors' travel is approved by the MD, and the MD's own travel by the DMD."
+                });
+
+            if (!approverId.HasValue)
+                logger.LogWarning(
+                    "Executive travel request {Form} approved by {Email} because no MD/DMD is assigned " +
+                    "to Executive Management — set them on the Departments screen.",
+                    request.FormNumber, caller.Email);
+        }
+
         request.Status        = "Approved";
         request.ApprovedById  = caller.Id;
         // Set the navigation too, not just the id — the notification prints the
@@ -451,6 +481,14 @@ public class TravelRequestController(
 
         await notifications.SendTravelRequestSubmittedAsync(request, null);
     }
+
+    /// <summary>
+    /// Who approves a director's travel: the head of the executive department
+    /// (the MD), unless the MD raised it — then the deputy (the DMD). Null when
+    /// the relevant person isn't assigned yet.
+    /// </summary>
+    private static Guid? ExecutiveApproverId(Department department, Guid requesterId) =>
+        department.HodUserId == requesterId ? department.DeputyHodUserId : department.HodUserId;
 
     private static string? Trim(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
