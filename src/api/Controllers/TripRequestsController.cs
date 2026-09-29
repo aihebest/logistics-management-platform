@@ -88,6 +88,16 @@ public class TripRequestsController(
         if (caller == null)
             return Unauthorized(new { error = "Cannot resolve user identity from token" });
 
+        // Vehicle trips are intrastate or interstate. International travel is a
+        // flight and belongs on the Travel Request Form, so it isn't accepted
+        // here. Older trips recorded as International still display normally.
+        if (dto.MovementType is not ("IntraState" or "Interstate"))
+            return BadRequest(new
+            {
+                error = "Movement type must be Intrastate or Interstate. For international travel, " +
+                        "raise a Travel Request instead."
+            });
+
         // Departure is when they actually travel. DepartureDate arrives as
         // "yyyy-MM-dd" and DepartureTime as "HH:mm" from the browser inputs.
         DateOnly? departureDate = DateOnly.TryParse(dto.DepartureDate, out var depDate) ? depDate : null;

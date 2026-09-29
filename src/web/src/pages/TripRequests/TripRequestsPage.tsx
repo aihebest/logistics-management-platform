@@ -8,7 +8,9 @@ import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 
 const STATUS_FILTER = ['', 'Pending', 'Approved', 'Active', 'Ongoing', 'Unattended', 'Completed', 'Rejected', 'Cancelled']
-const MOVEMENT_TYPES = ['IntraState', 'Interstate', 'International']
+// Vehicle trips are intrastate or interstate only — international travel is a
+// flight, and goes through the Travel Request Form instead.
+const MOVEMENT_TYPES = ['IntraState', 'Interstate']
 
 /**
  * Minimum notice per movement type, set by the Director of Logistics.
@@ -17,7 +19,6 @@ const MOVEMENT_TYPES = ['IntraState', 'Interstate', 'International']
 const NOTICE_HOURS: Record<string, number> = {
   IntraState: 4,
   Interstate: 24,
-  International: 24,
 }
 
 /** Staff grades, as set out by the HOD and Director of Logistics. */
@@ -207,9 +208,8 @@ export default function TripRequestsPage() {
       {/* SOP Notice */}
       <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
         <strong>Notice:</strong> Minimum notice before departure — <strong>Intrastate 4 hours</strong>,
-        <strong> Interstate and International 24 hours</strong>. Interstate and International movements
-        also require manager approval before a driver is assigned. The date and time of the request are
-        recorded automatically when you submit.
+        <strong> Interstate 24 hours</strong>. Interstate movements also require manager approval before
+        a driver is assigned. The date and time of the request are recorded automatically when you submit.
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3">
