@@ -24,11 +24,19 @@ export default function DepartmentsPage() {
     queryFn: () => departmentsApi.getAll(true),
   })
 
-  // Only people who could actually act as a head are offered.
-  const { data: hods = [] } = useQuery({
-    queryKey: ['platform-users', 'HOD'],
-    queryFn: () => platformUsersApi.getAll({ role: 'HOD' }),
+  // Anyone active with an email can head a department — not just HOD-role
+  // holders. The heads of Logistics and General Services hold Manager and
+  // Management, and ICT's head is an Admin; a HOD-only list left them out, so
+  // opening their row to edit showed no head and saving would have cleared it.
+  // HOD-role holders are listed first since they're the usual choice.
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ['platform-users', 'all'],
+    queryFn: () => platformUsersApi.getAll(),
   })
+  const hods = allUsers
+    .filter(u => u.isActive && u.email && u.role !== 'Driver')
+    .sort((a, b) =>
+      (a.role === 'HOD' ? 0 : 1) - (b.role === 'HOD' ? 0 : 1) || a.fullName.localeCompare(b.fullName))
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['departments'] })
@@ -115,7 +123,7 @@ export default function DepartmentsPage() {
               <label className="label">Head of Department</label>
               <select name="hodUserId" className="input" defaultValue="">
                 <option value="">Assign later</option>
-                {hods.map(h => <option key={h.id} value={h.id}>{h.fullName}</option>)}
+                {hods.map(h => <option key={h.id} value={h.id}>{h.fullName} — {h.role}</option>)}
               </select>
             </div>
             <div className="col-span-full flex gap-3">
@@ -143,7 +151,7 @@ export default function DepartmentsPage() {
               <label className="label">Head of Department</label>
               <select name="hodUserId" className="input" defaultValue={editing.hodUserId ?? ''}>
                 <option value="">No head assigned</option>
-                {hods.map(h => <option key={h.id} value={h.id}>{h.fullName}</option>)}
+                {hods.map(h => <option key={h.id} value={h.id}>{h.fullName} — {h.role}</option>)}
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 One person can head more than one department.
