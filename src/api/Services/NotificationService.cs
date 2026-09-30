@@ -77,10 +77,21 @@ public class NotificationService(
     // TRIP REQUEST NOTIFICATIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// <summary>
+    /// When the trip actually leaves, for emails. These used to print the time
+    /// the request was raised under "Date/Time", which an approver could easily
+    /// read as the departure. Departure time is optional on the form.
+    /// </summary>
+    private static string DepartureText(TripRequest trip) =>
+        trip.DepartureDate is null
+            ? "Not stated"
+            : $"{trip.DepartureDate:ddd dd MMM yyyy}" +
+              (string.IsNullOrWhiteSpace(trip.DepartureTime) ? "" : $" at {trip.DepartureTime[..Math.Min(5, trip.DepartureTime.Length)]}");
+
     public async Task SendTripRequestSubmittedAsync(TripRequest trip)
     {
         var requester = trip.RequestedBy;
-        var subject   = $"New Trip Request — {trip.Purpose} ({trip.RequestedDateTime:dd MMM yyyy HH:mm})";
+        var subject   = $"New Trip Request — {trip.Purpose} (departs {DepartureText(trip)})";
         var body      = $"""
             A new transport request has been submitted and requires your attention.
 
@@ -89,7 +100,7 @@ public class NotificationService(
             Purpose:     {trip.Purpose}
             Pickup:      {trip.PickupLocation}
             Destination: {trip.DestinationLocation}
-            Date/Time:   {trip.RequestedDateTime:f}
+            Departure:   {DepartureText(trip)}
             Priority:    {trip.Priority}
             Notes:       {trip.Notes ?? "None"}
 
@@ -123,7 +134,7 @@ public class NotificationService(
                 Purpose:     {trip.Purpose}
                 Pickup:      {trip.PickupLocation}
                 Destination: {trip.DestinationLocation}
-                Date/Time:   {trip.RequestedDateTime:f}
+                Departure:   {DepartureText(trip)}
 
                 You will be notified once a driver and vehicle have been assigned.
 
@@ -151,7 +162,7 @@ public class NotificationService(
             Purpose:     {trip.Purpose}
             Pickup:      {trip.PickupLocation}
             Destination: {trip.DestinationLocation}
-            Date/Time:   {trip.RequestedDateTime:f}
+            Departure:   {DepartureText(trip)}
             Driver:      {assignment?.Driver?.FullName ?? "To be confirmed"}
             Vehicle:     {(assignment?.Vehicle != null ? $"{assignment.Vehicle.Make} {assignment.Vehicle.Model} ({assignment.Vehicle.RegistrationNo})" : "To be confirmed")}
 
@@ -181,7 +192,7 @@ public class NotificationService(
 
             Reference:   {trip.Id.ToString()[..8].ToUpper()}
             Purpose:     {trip.Purpose}
-            Date/Time:   {trip.RequestedDateTime:f}
+            Departure:   {DepartureText(trip)}
             Reason:      {reason}
 
             Please contact your transport coordinator if you need to discuss alternatives or resubmit your request.
@@ -225,7 +236,7 @@ public class NotificationService(
     /// </summary>
     public async Task SendNoDriverAvailableAsync(TripRequest trip)
     {
-        var subject = $"No Driver/Vehicle Available — {trip.Purpose} ({trip.RequestedDateTime:dd MMM yyyy HH:mm})";
+        var subject = $"No Driver/Vehicle Available — {trip.Purpose} (departs {DepartureText(trip)})";
         var body    = $"""
             A trip request has been approved but cannot be assigned — no driver or
             vehicle is currently available at the requested time.
@@ -235,7 +246,7 @@ public class NotificationService(
             Purpose:     {trip.Purpose}
             Pickup:      {trip.PickupLocation}
             Destination: {trip.DestinationLocation}
-            Date/Time:   {trip.RequestedDateTime:f}
+            Departure:   {DepartureText(trip)}
             Priority:    {trip.Priority}
 
             The request is sitting in the pending queue. Please arrange an alternative
@@ -275,7 +286,7 @@ public class NotificationService(
             Purpose:     {assignment.TripRequest.Purpose}
             Pickup:      {assignment.TripRequest.PickupLocation}
             Destination: {assignment.TripRequest.DestinationLocation}
-            Date/Time:   {assignment.StartTime:f}
+            Departure:   {DepartureText(assignment.TripRequest)}
             Vehicle:     {assignment.Vehicle.Make} {assignment.Vehicle.Model} ({assignment.Vehicle.RegistrationNo})
             Requested By:{assignment.TripRequest.RequestedBy?.FullName ?? "Unknown"}
 
@@ -446,7 +457,7 @@ public class NotificationService(
             Purpose:     {request.PurposeOfTravel}
             Hotel:       {(request.HotelBookingRequired ? "Required" : "Not required")}
 
-            Once you verify it, the request goes to the DMD for management approval.
+            Once you verify it, the request goes to management for final approval.
 
             {PlatformUrl()}
             """;
@@ -537,7 +548,14 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        await SendToRolesAsync(subject, body, "Management");
+        // Staff travel goes to the staff-travel approvers only. The MD holds the
+        // Management role so he can approve directors' travel, but he approves
+        // nothing else — sending him every staff trip was noise at best.
+        var approvers = await GetStaffTravelApproverEmailsAsync();
+        if (approvers.Count == 0)
+            logger.LogWarning("Travel request {Form}: no staff-travel approvers with an email address", request.FormNumber);
+        else
+            await SendEmailToManyAsync(approvers, subject, body);
 
         // Keep the requester informed that it has cleared the first stage. When
         // there was no verification stage, saying it was "verified" would be
@@ -565,6 +583,23 @@ public class NotificationService(
         }
 
         logger.LogInformation("Travel request {Form} verified notifications sent", request.FormNumber);
+    }
+
+    /// <summary>
+    /// Everyone who approves staff travel: Management role holders, minus the
+    /// head of Executive Management (the MD), whose approvals are directors'
+    /// travel only.
+    /// </summary>
+    private async Task<List<string>> GetStaffTravelApproverEmailsAsync()
+    {
+        var mdEmail = await db.Departments
+            .Where(d => d.IsExecutive && d.HodUserId != null)
+            .Select(d => d.Hod!.Email)
+            .FirstOrDefaultAsync();
+
+        return (await GetEmailsForRolesAsync("Management"))
+            .Where(e => !string.Equals(e, mdEmail, StringComparison.OrdinalIgnoreCase))
+            .ToList();
     }
 
     /// <summary>

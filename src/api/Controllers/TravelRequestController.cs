@@ -323,6 +323,17 @@ public class TravelRequestController(
         // is the one travelling. Other members of management — including heads
         // who also approve staff travel — must not sign off their directors'.
         var requestDepartment = await db.Departments.FirstOrDefaultAsync(d => d.Name == request.Department);
+
+        // The MD approves directors' travel and nothing else. He holds the
+        // Management role for that, which would otherwise let him approve staff
+        // travel too.
+        if (requestDepartment?.IsExecutive != true
+            && await db.Departments.AnyAsync(d => d.IsExecutive && d.HodUserId == caller.Id))
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "The MD approves directors' travel only. Staff travel is approved by the other members of management."
+            });
+
         if (requestDepartment?.IsExecutive == true)
         {
             var approverId = ExecutiveApproverId(requestDepartment, request.RequestedById);

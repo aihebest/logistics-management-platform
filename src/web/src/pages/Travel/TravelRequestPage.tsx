@@ -78,7 +78,9 @@ export default function TravelRequestPage() {
 
   const mayApprove = (r: TravelRequest) => {
     const dept = departments.find(d => d.name === r.department)
-    if (!dept?.isExecutive) return true
+    // The MD approves directors' travel only, never staff travel.
+    const isMd = departments.some(d => d.isExecutive && d.hodUserId === me?.id)
+    if (!dept?.isExecutive) return !isMd
     const approverId = dept.hodUserId === r.requestedById ? dept.deputyHodUserId : dept.hodUserId
     return !approverId || approverId === me?.id
   }
