@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { tripsApi, driversApi, vehiclesApi, authApi, apiErrorMessage } from '../../services/api'
+import { tripsApi, driversApi, vehiclesApi, authApi, apiErrorMessage, type TripRequest } from '../../services/api'
 import { useAuth } from '../../auth/useAuth'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -83,11 +83,36 @@ export default function TripRequestsPage() {
   })
   const { data: vehicles = [] } = useQuery({
     queryKey: ['vehicles', 'Available'],
-    queryFn: () => vehiclesApi.getAll('Available'),
+    // All vehicles, not just those free this minute. A vehicle out on a trip
+    // now can still be right for one departing tomorrow, and the person
+    // assigning knows its schedule better than its current status does.
+    queryFn: () => vehiclesApi.getAll(),
     enabled: canApprove,
   })
 
   const availableDrivers = drivers.filter(d => d.driverStatus === 'Available')
+
+  /**
+   * Other live trips already holding this vehicle or driver on the same
+   * departure date — shown as a warning, not a block, so a double-booking is
+   * a deliberate choice rather than an accident.
+   */
+  const clashes = (trip: { id: string; departureDate?: string }, match: (o: TripRequest) => boolean) =>
+    trip.departureDate
+      ? trips.filter(o =>
+          o.id !== trip.id
+          && (o.status === 'Approved' || o.status === 'Active')
+          && o.departureDate === trip.departureDate
+          && match(o))
+      : []
+
+  const STATUS_NOTE: Record<string, string> = {
+    Assigned: 'in use now',
+    InMaintenance: 'in maintenance',
+    OnAssignment: 'on a trip now',
+    OffDuty: 'off duty',
+    OnBreak: 'on break',
+  }
 
   // Personnel count drives whether names are required; materials drives the
   // description field. Controlled so the form can react as they're changed.
@@ -460,20 +485,32 @@ export default function TripRequestsPage() {
                   <label className="label">Driver</label>
                   <select name="driverId" className="input" defaultValue="">
                     <option value="">Auto-assign (best available)</option>
-                    {availableDrivers.map(d => (
-                      <option key={d.id} value={d.id}>{d.fullName}</option>
-                    ))}
+                    {drivers.map(d => {
+                      const note = d.driverStatus && d.driverStatus !== 'Available' ? STATUS_NOTE[d.driverStatus] ?? d.driverStatus : null
+                      const booked = clashes(t, o => o.assignment?.driverName === d.fullName).length > 0
+                      return (
+                        <option key={d.id} value={d.id}>
+                          {d.fullName}{note ? ` — ${note}` : ''}{booked ? ' ⚠ already booked this day' : ''}
+                        </option>
+                      )
+                    })}
                   </select>
                 </div>
                 <div>
                   <label className="label">Vehicle</label>
                   <select name="vehicleId" className="input" defaultValue="">
                     <option value="">Auto-assign (best available)</option>
-                    {vehicles.map(v => (
-                      <option key={v.id} value={v.id}>
-                        {v.registrationNo} — {v.make} {v.model}
-                      </option>
-                    ))}
+                    {/* Out-of-service vehicles are the only ones left out —
+                        they aren't coming back for this trip. */}
+                    {vehicles.filter(v => v.status !== 'OutOfService').map(v => {
+                      const note = v.status !== 'Available' ? STATUS_NOTE[v.status] ?? v.status : null
+                      const booked = clashes(t, o => o.assignment?.vehicleReg === v.registrationNo).length > 0
+                      return (
+                        <option key={v.id} value={v.id}>
+                          {v.registrationNo} — {v.make} {v.model}{note ? ` (${note})` : ''}{booked ? ' ⚠ already booked this day' : ''}
+                        </option>
+                      )
+                    })}
                   </select>
                 </div>
                 <div className="flex items-end gap-2">
@@ -486,7 +523,8 @@ export default function TripRequestsPage() {
                 </div>
                 <p className="md:col-span-3 text-xs text-gray-500 -mt-1">
                   Leave both as auto-assign and the system picks the least-loaded available
-                  driver and vehicle. {t.movementType !== 'IntraState' && (
+                  driver and vehicle. Vehicles and drivers in use right now are listed too —
+                  pick one if you know it will be back before this trip departs. {t.movementType !== 'IntraState' && (
                     <span className="text-amber-600 font-medium">
                       {t.movementType} movements require Manager or Admin approval.
                     </span>
