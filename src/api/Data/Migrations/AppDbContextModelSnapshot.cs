@@ -223,6 +223,18 @@ namespace LogisticsApi.Data.Migrations
                 b.ToTable("TravelRequests");
             });
 
+            modelBuilder.Entity("LogisticsApi.Models.Entities.Project", b =>
+            {
+                b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");
+                b.Property<string>("Name").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+                b.Property<Guid?>("ManagerUserId").HasColumnType("uniqueidentifier");
+                b.Property<bool>("IsActive").HasColumnType("bit");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
+                b.HasKey("Id");
+                b.HasIndex("Name").IsUnique();
+                b.ToTable("Projects");
+            });
+
             modelBuilder.Entity("LogisticsApi.Models.Entities.TravelRequestLeg", b =>
             {
                 b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");

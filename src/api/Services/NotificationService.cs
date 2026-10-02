@@ -915,7 +915,8 @@ public class NotificationService(
     {
         var subject = $"Material Transport — HOD approval needed ({request.FormNumber})";
         var body = $"""
-            A material transport request has been submitted and is awaiting your approval as HOD.
+            A material transport request for your project has been submitted and is awaiting
+            your approval as project manager.
 
             {MaterialDetails(request)}
 
@@ -925,10 +926,31 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        await SendToRolesAsync(subject, body, "HOD");
-        await NotifyRolesInAppAsync("MaterialAwaitingHod", subject,
-            $"{request.FormNumber} — {request.ProjectName}: {request.Purpose}",
-            "MaterialTransportRequest", request.Id, "HOD");
+        // Straight to the PM of the project on the form. Material transport is
+        // project work; emailing every HOD reached a dozen people who could do
+        // nothing with it.
+        var pm = await db.Projects
+            .Where(p => p.Name == request.ProjectName && p.ManagerUserId != null)
+            .Select(p => p.Manager)
+            .FirstOrDefaultAsync();
+
+        if (pm is { Email.Length: > 0 })
+        {
+            await SendEmailAsync(pm.Email, subject, body);
+            await NotifyInAppAsync(pm.Id, "MaterialAwaitingHod", subject,
+                $"{request.FormNumber} — {request.ProjectName}: {request.Purpose}",
+                "MaterialTransportRequest", request.Id.ToString());
+        }
+        else
+        {
+            logger.LogWarning(
+                "Material transport {FormNo}: project '{Project}' has no PM assigned — sent to all HODs. " +
+                "Set the PM on the Departments screen.", request.FormNumber, request.ProjectName);
+            await SendToRolesAsync(subject, body, "HOD");
+            await NotifyRolesInAppAsync("MaterialAwaitingHod", subject,
+                $"{request.FormNumber} — {request.ProjectName}: {request.Purpose}",
+                "MaterialTransportRequest", request.Id, "HOD");
+        }
 
         logger.LogInformation("Material transport {FormNo} — HOD approval requested", request.FormNumber);
     }

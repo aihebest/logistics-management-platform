@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { materialTransportApi, vehiclesApi, driversApi, apiErrorMessage } from '../../services/api'
+import { materialTransportApi, vehiclesApi, driversApi, projectsApi, authApi, apiErrorMessage } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useAuth } from '../../auth/useAuth'
 import toast from 'react-hot-toast'
@@ -32,6 +32,23 @@ export default function MaterialTransportPage() {
     queryFn: () => materialTransportApi.get(selectedId!),
     enabled: !!selectedId,
   })
+
+  // Each project's requests are approved first by that project's PM.
+  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: () => projectsApi.getAll() })
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: authApi.me })
+
+  /**
+   * Whether the signed-in user can give the first (project) approval on a
+   * request — its own project's PM, or Admin as break-glass. Mirrors the check
+   * in MaterialTransportController.HodApprove.
+   */
+  const canProjectApprove = (projectName: string) => {
+    if (hasRole('Admin')) return true
+    const project = projects.find(p => p.name === projectName)
+    return project?.managerUserId
+      ? project.managerUserId === me?.id
+      : hasRole('HOD')   // older requests for a project not in the list
+  }
 
   const { data: drivers = [] } = useQuery({ queryKey: ['drivers'], queryFn: driversApi.getAll })
   const { data: vehicles = [] } = useQuery({ queryKey: ['vehicles'], queryFn: () => vehiclesApi.getAll() })
@@ -118,7 +135,18 @@ export default function MaterialTransportPage() {
           <h2 className="text-base font-semibold mb-4">New Material Transport Request</h2>
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><label className="label">Project Name</label><input name="projectName" className="input" required /></div>
+              <div>
+                <label className="label">Project</label>
+                {/* A fixed list: the project decides which PM approves first. */}
+                <select name="projectName" className="input" required defaultValue="">
+                  <option value="" disabled>Select project…</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}{p.managerName ? ` — PM: ${p.managerName}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div><label className="label">Purpose / Description</label><input name="purpose" className="input" required /></div>
               <div><label className="label">Loading Point</label><input name="loadingPoint" className="input" required /></div>
               <div><label className="label">Loading Contact Person</label><input name="loadingContactPerson" className="input" /></div>
@@ -194,7 +222,9 @@ export default function MaterialTransportPage() {
           </div>
 
           {/* Approval actions */}
-          {hasRole('Manager', 'Admin') && selected.status === 'PendingHOD' && (
+          {/* Stage 1 belongs to the project's PM. This used to be gated on
+              Manager/Admin, so the PMs never saw the buttons at all. */}
+          {canProjectApprove(selected.projectName) && selected.status === 'PendingHOD' && (
             <div className="flex gap-2 mb-4">
               <button onClick={() => hodApproval.mutate({ id: selected.id, action: 'Approve' })}
                 className="btn-primary text-xs">HOD Approve</button>

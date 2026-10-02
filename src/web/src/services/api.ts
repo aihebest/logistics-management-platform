@@ -404,6 +404,16 @@ export interface Department {
   deputyHodName?: string
 }
 
+/** A project and the PM who gives first approval on its material transport. */
+export interface Project {
+  id: string
+  name: string
+  managerUserId?: string
+  managerName?: string
+  managerEmail?: string
+  isActive: boolean
+}
+
 /** One row of the Outbound or Inbound routing table on the TRF. */
 export interface TravelLeg {
   direction: string           // Outbound | Inbound
@@ -691,6 +701,13 @@ export const departmentsApi = {
   create: (data: { name: string; hodUserId?: string }) =>
     api.post<Department>('/departments', data).then(r => r.data),
   update: (id: string, data: object) => api.patch(`/departments/${id}`, data),
+}
+
+/** Projects and their PMs — routes material transport to the right first approver. */
+export const projectsApi = {
+  getAll: (includeInactive = false) =>
+    api.get<Project[]>('/projects', { params: { includeInactive } }).then(r => r.data),
+  update: (id: string, data: object) => api.patch(`/projects/${id}`, data),
 }
 
 /** Travel Request Form (DEL-LG-FRM-002 Rev 07). */

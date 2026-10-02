@@ -27,6 +27,23 @@ public record UpdateDepartmentDto(
     bool? ClearDeputy = null
 );
 
+// ── Projects (material transport routing) ────────────────────────────────────
+
+public record ProjectDto(
+    Guid Id,
+    string Name,
+    Guid? ManagerUserId,
+    string? ManagerName,
+    string? ManagerEmail,
+    bool IsActive
+);
+
+public record UpdateProjectDto(
+    Guid? ManagerUserId = null,
+    bool? ClearManager = null,
+    bool? IsActive = null
+);
+
 // ── Travel Request Form (DEL-LG-FRM-002 Rev 07) ───────────────────────────────
 
 /// <summary>One row of the Outbound or Inbound routing table.</summary>

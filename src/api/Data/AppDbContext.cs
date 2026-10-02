@@ -23,6 +23,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TravelRequest> TravelRequests => Set<TravelRequest>();
     public DbSet<TravelRequestLeg> TravelRequestLegs => Set<TravelRequestLeg>();
     public DbSet<Department> Departments => Set<Department>();
+    public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectMaterialTracking> ProjectMaterialTrackings => Set<ProjectMaterialTracking>();
     public DbSet<MovementRegister> MovementRegisters => Set<MovementRegister>();
 
@@ -284,6 +285,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .HasForeignKey(x => x.HodUserId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne(x => x.DeputyHod).WithMany()
              .HasForeignKey(x => x.DeputyHodUserId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        mb.Entity<Project>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.HasIndex(x => x.Name).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.HasOne(x => x.Manager).WithMany()
+             .HasForeignKey(x => x.ManagerUserId).OnDelete(DeleteBehavior.NoAction);
         });
 
         mb.Entity<TravelRequestLeg>(e =>

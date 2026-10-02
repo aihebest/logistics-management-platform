@@ -69,6 +69,12 @@ public class MaterialTransportController(
         var caller = await GetCallerAsync();
         if (caller == null) return Unauthorized();
 
+        // The project decides who approves first, so it must be one we know.
+        var project = await db.Projects
+            .FirstOrDefaultAsync(p => p.IsActive && p.Name == dto.ProjectName.Trim());
+        if (project == null)
+            return BadRequest(new { error = $"'{dto.ProjectName}' is not a recognised project. Choose one from the list." });
+
         var formNo = await GenerateFormNumberAsync();
 
         var request = new MaterialTransportRequest
@@ -76,7 +82,7 @@ public class MaterialTransportController(
             Id = Guid.NewGuid(),
             FormNumber = formNo,
             RequestedById = caller.Id,
-            ProjectName = dto.ProjectName,
+            ProjectName = project.Name,
             Purpose = dto.Purpose,
             LoadingPoint = dto.LoadingPoint,
             LoadingContactPerson = dto.LoadingContactPerson,
@@ -158,6 +164,16 @@ public class MaterialTransportController(
 
         var caller = await GetCallerAsync();
         if (caller == null) return Unauthorized();
+
+        // Only the PM of this request's project may approve it — not any of the
+        // four project HODs. Admin stays as break-glass. Older requests whose
+        // project isn't in the list fall back to any HOD.
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Name == request.ProjectName);
+        if (project?.ManagerUserId != null && project.ManagerUserId != caller.Id && !User.IsInRole("Admin"))
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = $"Only the {project.Name} project manager can approve this request."
+            });
 
         var approved = dto.Action == "Approve";
         request.Status          = approved ? "PendingManager" : "Rejected";

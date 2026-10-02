@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { departmentsApi, platformUsersApi, apiErrorMessage, type Department } from '../../services/api'
+import { departmentsApi, platformUsersApi, projectsApi, apiErrorMessage, type Department } from '../../services/api'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
@@ -82,6 +82,19 @@ export default function DepartmentsPage() {
       },
     })
   }
+
+  // Projects and their PMs — the first approver on each project's material
+  // transport requests.
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects', 'all'],
+    queryFn: () => projectsApi.getAll(true),
+  })
+
+  const updateProject = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) => projectsApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['projects'] }); toast.success('Project updated') },
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to update project'), { duration: 6000 }),
+  })
 
   const unassigned = departments.filter(d => d.isActive && !d.hodUserId).length
 
@@ -236,6 +249,59 @@ export default function DepartmentsPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* ── Projects ─────────────────────────────────────────────────────────
+          Material transport is project work. Each request goes to the PM of
+          the project chosen on the form, and only that PM can approve it. */}
+      <div>
+        <h2 className="text-lg font-bold text-gray-900">Projects</h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          The project manager gives first approval on their project's material transport requests
+        </p>
+      </div>
+      <div className="card overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              {['Project', 'Project Manager', 'Email', 'Status'].map(h => (
+                <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {projects.map(p => (
+              <tr key={p.id} className={p.isActive && !p.managerUserId ? 'bg-amber-50' : ''}>
+                <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
+                <td className="px-4 py-3">
+                  <select
+                    className="input py-1"
+                    value={p.managerUserId ?? ''}
+                    disabled={updateProject.isPending}
+                    onChange={e => updateProject.mutate({
+                      id: p.id,
+                      data: e.target.value ? { managerUserId: e.target.value } : { clearManager: true },
+                    })}
+                  >
+                    <option value="">No PM assigned</option>
+                    {hods.map(h => <option key={h.id} value={h.id}>{h.fullName} — {h.role}</option>)}
+                  </select>
+                </td>
+                <td className="px-4 py-3 text-gray-500">{p.managerEmail ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                    p.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {p.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {projects.length === 0 && (
+              <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">No projects yet</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   )
