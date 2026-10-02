@@ -71,6 +71,7 @@ public class PlatformUsersController(
             // which is almost always what the admin actually intends.
             var previousRole = existing.Role;
             existing.Role     = dto.Role;
+            existing.AppRoles = dto.Role == "Staff" ? null : $",{dto.Role},";
             existing.IsActive = true;
             if (!string.IsNullOrWhiteSpace(dto.FullName))    existing.FullName    = dto.FullName.Trim();
             if (!string.IsNullOrWhiteSpace(dto.PhoneNumber)) existing.PhoneNumber = dto.PhoneNumber.Trim();
@@ -96,6 +97,7 @@ public class PlatformUsersController(
             Role          = dto.Role,
             DriverStatus  = dto.Role == "Driver" ? "OffDuty" : null,
             DepartmentId  = dto.DepartmentId,
+            AppRoles      = dto.Role == "Staff" ? null : $",{dto.Role},",
             Position      = dto.Position?.Trim(),
             IsActive      = true,
             CreatedAt     = DateTime.UtcNow
@@ -134,6 +136,13 @@ public class PlatformUsersController(
             user.Role = dto.Role;
             if (dto.Role == "Driver") user.DriverStatus ??= "OffDuty";
             else if (user.Role != "Driver") user.DriverStatus = null;
+
+            // Reset the stored role set to match. Emails are sent by role set,
+            // and without this a demoted user kept receiving the old role's mail
+            // until their next sign-in — so moving a department head from HOD to
+            // Staff didn't stop the material transport emails. Anyone who holds
+            // roles in Entra has them re-applied when they next sign in.
+            user.AppRoles = dto.Role == "Staff" ? null : $",{dto.Role},";
         }
 
         if (!string.IsNullOrWhiteSpace(dto.Email))
