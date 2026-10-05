@@ -38,6 +38,8 @@ public interface INotificationService
     /// <summary>Pass the department's head, or null to fall back to all HODs.</summary>
     Task SendTravelRequestSubmittedAsync(TravelRequest request, User? hod);
     Task SendTravelRequestVerifiedAsync(TravelRequest request);
+    /// <summary>For-information copy to the travel desk when any TRF is submitted.</summary>
+    Task SendTravelDeskSubmittedAsync(TravelRequest request);
     /// <summary>A director's travel, to the MD — or the DMD when the MD is travelling.</summary>
     Task SendExecutiveTravelForApprovalAsync(TravelRequest request, User? approver);
     Task SendTravelRequestApprovedAsync(TravelRequest request);
@@ -72,6 +74,49 @@ public class NotificationService(
     //   Email__SupervisorEmail = supervisor@desicongroup.com
     private readonly string? _managerEmail    = config["Email:ManagerEmail"];
     private readonly string? _supervisorEmail = config["Email:SupervisorEmail"];
+
+    /// <summary>
+    /// Whoever processes travel bookings, copied on every TRF at submission and
+    /// again at approval. Set Email__TravelDeskEmail in App Service — comma- or
+    /// semicolon-separated for more than one person. Kept as a setting rather
+    /// than a role so it reaches the travel desk without copying every manager.
+    /// </summary>
+    private List<string> TravelDeskEmails() =>
+        (config["Email:TravelDeskEmail"] ?? "")
+            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// Early heads-up to the travel desk when a TRF is submitted, so a booking
+    /// can be planned before approval rather than discovered after it.
+    /// </summary>
+    public async Task SendTravelDeskSubmittedAsync(TravelRequest request)
+    {
+        var desk = TravelDeskEmails();
+        if (desk.Count == 0) return;
+
+        await SendEmailToManyAsync(desk,
+            $"New TRF Submitted (for information) — {request.FormNumber} ({TravellerName(request)})",
+            $"""
+            For information: a new Travel Request has been submitted. It is now going
+            through approval — no action is needed until it is approved.
+
+            Form No:     {request.FormNumber}
+            Traveller:   {TravellerName(request)}
+            Department:  {request.Department}
+            Journey:     {TravelSummary(request)}
+            Purpose:     {request.PurposeOfTravel}
+            Hotel:       {(request.HotelBookingRequired ? "Required" : "Not required")}
+
+            You will receive a further email once it is approved and ready to book.
+
+            {PlatformUrl()}
+            """);
+
+        logger.LogInformation("Travel desk copied on submitted TRF {Form}: {Recipients}",
+            request.FormNumber, string.Join(", ", desk));
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // TRIP REQUEST NOTIFICATIONS
@@ -709,6 +754,9 @@ public class NotificationService(
 
         if (request.VerifiedBy?.Email is { Length: > 0 } verifierEmail)
             recipients.Add(verifierEmail);
+
+        // And the travel desk, who process the booking, whatever their role.
+        recipients.AddRange(TravelDeskEmails());
 
         recipients = recipients.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 

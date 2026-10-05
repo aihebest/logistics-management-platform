@@ -182,6 +182,15 @@ public class TravelRequestController(
                 request.FormNumber);
         }
 
+        // Travel desk copy, whichever approval route the request took — kept
+        // separate so a failure in one email can't suppress the other.
+        try { await notifications.SendTravelDeskSubmittedAsync(request); }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Travel desk notification failed for {Form} — the request itself was saved",
+                request.FormNumber);
+        }
+
         return CreatedAtAction(nameof(Get), new { id = request.Id }, await GetFullDto(request.Id));
     }
 
