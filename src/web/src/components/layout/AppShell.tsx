@@ -29,7 +29,8 @@ const navGroups = [
       { to: '/assignments', label: 'Assignments', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', roles: ['Coordinator', 'Manager', 'Admin'] },
       { to: '/movement-register', label: 'Movement Register', icon: 'M9 5l7 7-7 7', roles: OPS },
       { to: '/movement-summary', label: 'Movement Summary', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', roles: ['Coordinator', 'Manager', 'Admin'] },
-      { to: '/material-transport', label: 'Material Transport', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', roles: OPS },
+      // Open to all staff: anyone may raise a material transport request.
+      { to: '/material-transport', label: 'Material Transport', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', roles: [] as string[] },
       { to: '/travel', label: 'Travel Requests', icon: 'M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802', roles: [] as string[] },
     ],
   },

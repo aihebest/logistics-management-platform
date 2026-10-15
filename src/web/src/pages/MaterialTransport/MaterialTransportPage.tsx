@@ -50,12 +50,16 @@ export default function MaterialTransportPage() {
       : hasRole('HOD')   // older requests for a project not in the list
   }
 
-  const { data: drivers = [] } = useQuery({ queryKey: ['drivers'], queryFn: driversApi.getAll })
-  const { data: vehicles = [] } = useQuery({ queryKey: ['vehicles'], queryFn: () => vehiclesApi.getAll() })
+  // Drivers and vehicles are only needed to assign an approved request, and
+  // ordinary staff can now open this page to raise requests — so only load
+  // them for the people who assign, rather than firing calls staff are refused.
+  const canAssign = hasRole('Coordinator', 'Manager', 'Admin')
+  const { data: drivers = [] } = useQuery({ queryKey: ['drivers'], queryFn: driversApi.getAll, enabled: canAssign })
+  const { data: vehicles = [] } = useQuery({ queryKey: ['vehicles'], queryFn: () => vehiclesApi.getAll(), enabled: canAssign })
 
   const createRequest = useMutation({
     mutationFn: materialTransportApi.create,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['material-transport'] }); setShowForm(false); toast.success('Request submitted — pending HOD approval') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['material-transport'] }); setShowForm(false); toast.success("Request submitted — pending the project manager's approval") },
     onError: err => toast.error(apiErrorMessage(err, 'Failed to submit request'), { duration: 6000 }),
   })
 

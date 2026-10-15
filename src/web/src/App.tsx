@@ -50,13 +50,13 @@ export default function App() {
               <Route path="/" element={<LandingRedirect />} />
               <Route path="/trips" element={<TripRequestsPage />} />
               <Route path="/travel" element={<TravelRequestPage />} />
+              <Route path="/material-transport" element={<MaterialTransportPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
 
               <Route path="/dashboard" element={<RequireRole roles={OPS}><DashboardPage /></RequireRole>} />
               <Route path="/vehicles" element={<RequireRole roles={OPS}><VehiclesPage /></RequireRole>} />
               <Route path="/fuel" element={<RequireRole roles={OPS}><FuelPage /></RequireRole>} />
               <Route path="/movement-register" element={<RequireRole roles={OPS}><MovementRegisterPage /></RequireRole>} />
-              <Route path="/material-transport" element={<RequireRole roles={OPS}><MaterialTransportPage /></RequireRole>} />
               <Route path="/project-materials" element={<RequireRole roles={OPS}><ProjectMaterialsPage /></RequireRole>} />
 
               <Route path="/drivers" element={<RequireRole roles={OPS_ADMIN}><DriversPage /></RequireRole>} />

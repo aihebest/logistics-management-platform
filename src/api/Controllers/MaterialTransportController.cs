@@ -46,8 +46,21 @@ public class MaterialTransportController(
         if (!string.IsNullOrEmpty(status)) q = q.Where(r => r.Status == status);
         if (year.HasValue) q = q.Where(r => r.CreatedAt.Year == year.Value);
 
+        // All staff can now raise material requests, so the list is scoped:
+        // they see their own; logistics, management and the project managers
+        // see everything.
+        if (!SeesAllRequests())
+        {
+            var caller = await GetCallerAsync();
+            if (caller == null) return [];
+            q = q.Where(r => r.RequestedById == caller.Id);
+        }
+
         return await q.OrderByDescending(r => r.CreatedAt).Select(r => ToDto(r)).ToListAsync();
     }
+
+    private bool SeesAllRequests() =>
+        User.IsOperationsStaff() || User.HasAnyRole("HOD", "Management", "Mechanic");
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<MaterialTransportRequestDto>> Get(Guid id)
@@ -60,7 +73,19 @@ public class MaterialTransportController(
             .Include(x => x.AssignedVehicle)
             .Include(x => x.Items)
             .FirstOrDefaultAsync(x => x.Id == id);
-        return r == null ? NotFound() : ToDto(r);
+        if (r == null) return NotFound();
+
+        if (!SeesAllRequests())
+        {
+            var caller = await GetCallerAsync();
+            if (caller == null || r.RequestedById != caller.Id)
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    error = "You can only view material transport requests you raised."
+                });
+        }
+
+        return ToDto(r);
     }
 
     [HttpPost]
