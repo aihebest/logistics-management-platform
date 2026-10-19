@@ -19,6 +19,7 @@ import DriverPerformancePage from './pages/DriverPerformance/DriverPerformancePa
 import DriverSchedulePage from './pages/DriverSchedule/DriverSchedulePage'
 // Phase 3
 import TravelRequestPage from './pages/Travel/TravelRequestPage'
+import ParcelDispatchPage from './pages/Parcels/ParcelDispatchPage'
 import ProjectMaterialsPage from './pages/ProjectMaterials/ProjectMaterialsPage'
 import MovementRegisterPage from './pages/MovementRegister/MovementRegisterPage'
 import MovementSummaryPage from './pages/MovementRegister/MovementSummaryPage'
@@ -51,6 +52,7 @@ export default function App() {
               <Route path="/trips" element={<TripRequestsPage />} />
               <Route path="/travel" element={<TravelRequestPage />} />
               <Route path="/material-transport" element={<MaterialTransportPage />} />
+              <Route path="/parcels" element={<ParcelDispatchPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
 
               <Route path="/dashboard" element={<RequireRole roles={OPS}><DashboardPage /></RequireRole>} />

@@ -27,6 +27,60 @@ public record UpdateDepartmentDto(
     bool? ClearDeputy = null
 );
 
+// ── Parcel Dispatch ──────────────────────────────────────────────────────────
+
+public record ParcelDispatchDto(
+    Guid Id,
+    string FormNumber,
+    Guid RequestedById,
+    string RequestedByName,
+    string SenderName,
+    string SenderLocation,
+    string SenderDepartment,
+    string? SenderPhone,
+    string ReceiverName,
+    string ReceiverAddress,
+    string? ReceiverPhone,
+    string Description,
+    bool IsFragile,
+    string Priority,
+    string Scope,
+    string Carrier,
+    string Status,
+    string? HodApprovedByName,
+    DateTime? HodApprovedAt,
+    string? HodRemarks,
+    string? ManagerApprovedByName,
+    DateTime? ManagerApprovedAt,
+    string? ManagerRemarks,
+    string? RejectionReason,
+    string? TrackingNumber,
+    DateTime? DispatchedAt,
+    string? DispatchedByName,
+    DateOnly? ExpectedDispatchDate,   // next Friday for non-urgent Port Harcourt parcels
+    DateTime CreatedAt
+);
+
+public record CreateParcelDispatchDto(
+    string SenderName,
+    string SenderLocation,
+    string SenderDepartment,
+    string ReceiverName,
+    string ReceiverAddress,
+    string Description,
+    string Scope,
+    string Carrier,
+    string? SenderPhone = null,
+    string? ReceiverPhone = null,
+    bool IsFragile = false,
+    string Priority = "Normal"
+);
+
+/// <summary>Approve or reject, at either stage.</summary>
+public record ParcelDecisionDto(string Action, string? Remarks);   // Approve | Reject
+
+public record MarkParcelDispatchedDto(string? TrackingNumber, string? Carrier = null);
+
 // ── Projects (material transport routing) ────────────────────────────────────
 
 public record ProjectDto(

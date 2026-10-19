@@ -404,6 +404,41 @@ export interface Department {
   deputyHodName?: string
 }
 
+/** A parcel sent by courier — documents, plaques, certificates. */
+export interface ParcelDispatch {
+  id: string
+  formNumber: string
+  requestedById: string
+  requestedByName: string
+  senderName: string
+  senderLocation: string
+  senderDepartment: string
+  senderPhone?: string
+  receiverName: string
+  receiverAddress: string
+  receiverPhone?: string
+  description: string
+  isFragile: boolean
+  priority: string            // Normal | High | Urgent
+  scope: string               // Domestic | International
+  carrier: string             // FedEx | Airport Dispatch | DHL
+  // PendingHOD | PendingManager | Approved | Dispatched | Rejected | Cancelled
+  status: string
+  hodApprovedByName?: string
+  hodApprovedAt?: string
+  hodRemarks?: string
+  managerApprovedByName?: string
+  managerApprovedAt?: string
+  managerRemarks?: string
+  rejectionReason?: string
+  trackingNumber?: string
+  dispatchedAt?: string
+  dispatchedByName?: string
+  /** Next Friday for non-urgent Port Harcourt parcels; absent otherwise. */
+  expectedDispatchDate?: string
+  createdAt: string
+}
+
 /** A project and the PM who gives first approval on its material transport. */
 export interface Project {
   id: string
@@ -701,6 +736,20 @@ export const departmentsApi = {
   create: (data: { name: string; hodUserId?: string }) =>
     api.post<Department>('/departments', data).then(r => r.data),
   update: (id: string, data: object) => api.patch(`/departments/${id}`, data),
+}
+
+/** Parcel Dispatch: sender's HOD → GM Logistics → Logistics dispatches with tracking. */
+export const parcelsApi = {
+  getAll: (params?: { status?: string }) =>
+    api.get<ParcelDispatch[]>('/parcels', { params }).then(r => r.data),
+  create: (data: object) => api.post<ParcelDispatch>('/parcels', data).then(r => r.data),
+  hodDecision: (id: string, action: 'Approve' | 'Reject', remarks?: string) =>
+    api.post(`/parcels/${id}/hod-decision`, { action, remarks }),
+  managerDecision: (id: string, action: 'Approve' | 'Reject', remarks?: string) =>
+    api.post(`/parcels/${id}/manager-decision`, { action, remarks }),
+  dispatch: (id: string, trackingNumber?: string, carrier?: string) =>
+    api.post(`/parcels/${id}/dispatch`, { trackingNumber, carrier }),
+  cancel: (id: string) => api.post(`/parcels/${id}/cancel`),
 }
 
 /** Projects and their PMs — routes material transport to the right first approver. */

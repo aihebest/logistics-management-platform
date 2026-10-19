@@ -223,6 +223,42 @@ namespace LogisticsApi.Data.Migrations
                 b.ToTable("TravelRequests");
             });
 
+            modelBuilder.Entity("LogisticsApi.Models.Entities.ParcelDispatch", b =>
+            {
+                b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");
+                b.Property<string>("FormNumber").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)");
+                b.Property<Guid>("RequestedById").HasColumnType("uniqueidentifier");
+                b.Property<string>("SenderName").IsRequired().HasMaxLength(150).HasColumnType("nvarchar(150)");
+                b.Property<string>("SenderLocation").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+                b.Property<string>("SenderDepartment").IsRequired().HasMaxLength(150).HasColumnType("nvarchar(150)");
+                b.Property<string>("SenderPhone").HasMaxLength(50).HasColumnType("nvarchar(50)");
+                b.Property<string>("ReceiverName").IsRequired().HasMaxLength(150).HasColumnType("nvarchar(150)");
+                b.Property<string>("ReceiverAddress").IsRequired().HasMaxLength(500).HasColumnType("nvarchar(500)");
+                b.Property<string>("ReceiverPhone").HasMaxLength(50).HasColumnType("nvarchar(50)");
+                b.Property<string>("Description").IsRequired().HasMaxLength(1000).HasColumnType("nvarchar(1000)");
+                b.Property<bool>("IsFragile").HasColumnType("bit");
+                b.Property<string>("Priority").IsRequired().HasMaxLength(20).HasColumnType("nvarchar(20)");
+                b.Property<string>("Scope").IsRequired().HasMaxLength(20).HasColumnType("nvarchar(20)");
+                b.Property<string>("Carrier").IsRequired().HasMaxLength(50).HasColumnType("nvarchar(50)");
+                b.Property<string>("Status").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)");
+                b.Property<Guid?>("HodApprovedById").HasColumnType("uniqueidentifier");
+                b.Property<DateTime?>("HodApprovedAt").HasColumnType("datetime2");
+                b.Property<string>("HodRemarks").HasMaxLength(500).HasColumnType("nvarchar(500)");
+                b.Property<Guid?>("ManagerApprovedById").HasColumnType("uniqueidentifier");
+                b.Property<DateTime?>("ManagerApprovedAt").HasColumnType("datetime2");
+                b.Property<string>("ManagerRemarks").HasMaxLength(500).HasColumnType("nvarchar(500)");
+                b.Property<string>("RejectionReason").HasMaxLength(500).HasColumnType("nvarchar(500)");
+                b.Property<DateTime?>("RejectedAt").HasColumnType("datetime2");
+                b.Property<string>("TrackingNumber").HasMaxLength(100).HasColumnType("nvarchar(100)");
+                b.Property<DateTime?>("DispatchedAt").HasColumnType("datetime2");
+                b.Property<Guid?>("DispatchedById").HasColumnType("uniqueidentifier");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
+                b.Property<DateTime>("UpdatedAt").HasColumnType("datetime2");
+                b.HasKey("Id");
+                b.HasIndex("FormNumber").IsUnique();
+                b.ToTable("ParcelDispatches");
+            });
+
             modelBuilder.Entity("LogisticsApi.Models.Entities.Project", b =>
             {
                 b.Property<Guid>("Id").HasColumnType("uniqueidentifier").HasDefaultValueSql("NEWSEQUENTIALID()");

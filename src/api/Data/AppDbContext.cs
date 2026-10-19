@@ -24,6 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TravelRequestLeg> TravelRequestLegs => Set<TravelRequestLeg>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ParcelDispatch> ParcelDispatches => Set<ParcelDispatch>();
     public DbSet<ProjectMaterialTracking> ProjectMaterialTrackings => Set<ProjectMaterialTracking>();
     public DbSet<MovementRegister> MovementRegisters => Set<MovementRegister>();
 
@@ -285,6 +286,41 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .HasForeignKey(x => x.HodUserId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne(x => x.DeputyHod).WithMany()
              .HasForeignKey(x => x.DeputyHodUserId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        mb.Entity<ParcelDispatch>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.HasIndex(x => x.FormNumber).IsUnique();
+            // Lengths mirror the ParcelDispatch migration.
+            e.Property(x => x.FormNumber).HasMaxLength(30);
+            e.Property(x => x.SenderName).HasMaxLength(150);
+            e.Property(x => x.SenderLocation).HasMaxLength(100);
+            e.Property(x => x.SenderDepartment).HasMaxLength(150);
+            e.Property(x => x.SenderPhone).HasMaxLength(50);
+            e.Property(x => x.ReceiverName).HasMaxLength(150);
+            e.Property(x => x.ReceiverAddress).HasMaxLength(500);
+            e.Property(x => x.ReceiverPhone).HasMaxLength(50);
+            e.Property(x => x.Description).HasMaxLength(1000);
+            e.Property(x => x.Priority).HasMaxLength(20);
+            e.Property(x => x.Scope).HasMaxLength(20);
+            e.Property(x => x.Carrier).HasMaxLength(50);
+            e.Property(x => x.Status).HasMaxLength(30);
+            e.Property(x => x.HodRemarks).HasMaxLength(500);
+            e.Property(x => x.ManagerRemarks).HasMaxLength(500);
+            e.Property(x => x.RejectionReason).HasMaxLength(500);
+            e.Property(x => x.TrackingNumber).HasMaxLength(100);
+
+            e.HasOne(x => x.RequestedBy).WithMany()
+             .HasForeignKey(x => x.RequestedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.HodApprovedBy).WithMany()
+             .HasForeignKey(x => x.HodApprovedById).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(x => x.ManagerApprovedBy).WithMany()
+             .HasForeignKey(x => x.ManagerApprovedById).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(x => x.DispatchedBy).WithMany()
+             .HasForeignKey(x => x.DispatchedById).OnDelete(DeleteBehavior.NoAction);
         });
 
         mb.Entity<Project>(e =>

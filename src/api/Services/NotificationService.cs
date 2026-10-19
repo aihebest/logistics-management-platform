@@ -34,6 +34,12 @@ public interface INotificationService
     /// </summary>
     Task SendSecurityTransportAlertAsync(TripRequest trip);
 
+    // ── Parcel Dispatch ─────────────────────────────────────────────────────────
+    Task SendParcelAwaitingHodAsync(ParcelDispatch parcel, User hod);
+    Task SendParcelAwaitingManagerAsync(ParcelDispatch parcel);
+    Task SendParcelDecisionAsync(ParcelDispatch parcel, bool approved, string decidedBy);
+    Task SendParcelDispatchedAsync(ParcelDispatch parcel);
+
     // ── Travel Request Form ─────────────────────────────────────────────────────
     /// <summary>Pass the department's head, or null to fall back to all HODs.</summary>
     Task SendTravelRequestSubmittedAsync(TravelRequest request, User? hod);
@@ -461,6 +467,141 @@ public class NotificationService(
 
         await SendEmailToManyAsync(recipients, subject, body);
         logger.LogInformation("Security notified of approved trip {Ref} — {Count} recipient(s)", ref_, recipients.Count);
+    }
+
+    // ── Parcel Dispatch ─────────────────────────────────────────────────────────
+
+    private static string ParcelDetails(ParcelDispatch p) => $"""
+        Form No:     {p.FormNumber}
+        Sender:      {p.SenderName} ({p.SenderDepartment}, {p.SenderLocation})
+        Receiver:    {p.ReceiverName}
+        Address:     {p.ReceiverAddress}
+        Parcel:      {p.Description}{(p.IsFragile ? "  — FRAGILE" : "")}
+        Priority:    {p.Priority}
+        Courier:     {p.Scope} — {p.Carrier}
+        """;
+
+    /// <summary>
+    /// Plain-English dispatch timing. Non-urgent Port Harcourt parcels go on the
+    /// Friday run; everything else goes once approved.
+    /// </summary>
+    private static string DispatchTiming(ParcelDispatch p)
+    {
+        var expected = LogisticsApi.Controllers.ParcelDispatchController.ExpectedDispatch(p);
+        return expected.HasValue
+            ? $"Expected dispatch: Friday {expected.Value:dd MMM yyyy} (weekly Port Harcourt run)"
+            : p.Priority == "Urgent"
+                ? "Expected dispatch: immediately once approved (urgent)"
+                : "Expected dispatch: once approved";
+    }
+
+    public async Task SendParcelAwaitingHodAsync(ParcelDispatch parcel, User hod)
+    {
+        if (string.IsNullOrWhiteSpace(hod.Email)) return;
+
+        var subject = $"Parcel for Approval — {parcel.FormNumber} ({parcel.SenderName})";
+        await SendEmailAsync(hod.Email, subject, $"""
+            A parcel dispatch request from your department needs your approval.
+
+            {ParcelDetails(parcel)}
+
+            Once you approve, it goes to GM Logistics.
+
+            {PlatformUrl()}
+            """);
+        await NotifyInAppAsync(hod.Id, "ParcelForApproval", subject,
+            $"{parcel.SenderName} → {parcel.ReceiverName}: {parcel.Description}",
+            "ParcelDispatch", parcel.Id.ToString());
+    }
+
+    public async Task SendParcelAwaitingManagerAsync(ParcelDispatch parcel)
+    {
+        var subject = $"Parcel for GM Logistics Approval — {parcel.FormNumber} ({parcel.SenderName})";
+        var approvedLine = parcel.HodApprovedBy != null
+            ? $"Approved by head of department: {parcel.HodApprovedBy.FullName}"
+            : "No head-of-department approval needed (raised by the head, or no head assigned).";
+
+        await SendToRolesAsync(subject, $"""
+            A parcel dispatch request needs GM Logistics approval.
+
+            {ParcelDetails(parcel)}
+
+            {approvedLine}
+
+            {PlatformUrl()}
+            """, "Manager");
+    }
+
+    public async Task SendParcelDecisionAsync(ParcelDispatch parcel, bool approved, string decidedBy)
+    {
+        var requesterEmail = parcel.RequestedBy?.Email;
+
+        if (!approved)
+        {
+            if (string.IsNullOrWhiteSpace(requesterEmail)) return;
+            await SendEmailAsync(requesterEmail, $"Parcel Not Approved — {parcel.FormNumber}", $"""
+                Hi {parcel.RequestedBy!.FullName},
+
+                Your parcel dispatch request was not approved.
+
+                {ParcelDetails(parcel)}
+
+                Reason:      {parcel.RejectionReason ?? "No reason given"}
+                Decided by:  {decidedBy}
+
+                {PlatformUrl()}
+                """);
+            return;
+        }
+
+        // Approved — the sender hears when to expect it, and the coordinators who
+        // do the dispatching hear there is one to send.
+        if (!string.IsNullOrWhiteSpace(requesterEmail))
+            await SendEmailAsync(requesterEmail, $"Parcel Approved — {parcel.FormNumber}", $"""
+                Hi {parcel.RequestedBy!.FullName},
+
+                Your parcel has been approved and is with Logistics for dispatch.
+
+                {ParcelDetails(parcel)}
+
+                {DispatchTiming(parcel)}
+
+                You will receive the tracking number once it has been sent.
+
+                {PlatformUrl()}
+                """);
+
+        await SendToRolesAsync($"Parcel Ready to Dispatch — {parcel.FormNumber} ({parcel.Priority})", $"""
+            A parcel has been approved and is ready to dispatch.
+
+            {ParcelDetails(parcel)}
+            Receiver Tel: {parcel.ReceiverPhone ?? "Not given"}
+            Sender Tel:   {parcel.SenderPhone ?? "Not given"}
+
+            {DispatchTiming(parcel)}
+
+            Once sent, mark it as dispatched in the platform with the tracking number.
+
+            {PlatformUrl()}
+            """, "Coordinator");
+    }
+
+    public async Task SendParcelDispatchedAsync(ParcelDispatch parcel)
+    {
+        if (string.IsNullOrWhiteSpace(parcel.RequestedBy?.Email)) return;
+
+        await SendEmailAsync(parcel.RequestedBy.Email, $"Parcel Dispatched — {parcel.FormNumber}", $"""
+            Hi {parcel.RequestedBy.FullName},
+
+            Your parcel has been dispatched.
+
+            {ParcelDetails(parcel)}
+
+            Tracking No: {parcel.TrackingNumber ?? "Not provided — contact Logistics"}
+            Dispatched:  {parcel.DispatchedAt:dd MMM yyyy HH:mm} UTC
+
+            {PlatformUrl()}
+            """);
     }
 
     // ── Travel Request Form (DEL-LG-FRM-002) ────────────────────────────────────

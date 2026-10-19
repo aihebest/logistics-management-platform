@@ -31,6 +31,8 @@ const navGroups = [
       { to: '/movement-summary', label: 'Movement Summary', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', roles: ['Coordinator', 'Manager', 'Admin'] },
       // Open to all staff: anyone may raise a material transport request.
       { to: '/material-transport', label: 'Material Transport', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', roles: [] as string[] },
+      // Open to all staff: anyone may send a parcel.
+      { to: '/parcels', label: 'Parcel Dispatch', icon: 'M3 8l9-5 9 5v8l-9 5-9-5V8zm9 5l9-5M12 13L3 8m9 5v8', roles: [] as string[] },
       { to: '/travel', label: 'Travel Requests', icon: 'M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802', roles: [] as string[] },
     ],
   },
