@@ -195,12 +195,34 @@ export default function TripRequestsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['trips'] }); toast.success('Trip cancelled') },
   })
 
+  // A pending request being corrected. The same form is reused, pre-filled.
+  const [editingTrip, setEditingTrip] = useState<TripRequest | null>(null)
+
+  const updateTrip = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) => tripsApi.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips'] })
+      resetForm()
+      toast.success('Trip request updated')
+    },
+    onError: err => toast.error(apiErrorMessage(err, 'Failed to update trip request'), { duration: 6000 }),
+  })
+
+  const startEdit = (t: TripRequest) => {
+    setEditingTrip(t)
+    setPersonnelCount(t.personnelCount || 1)
+    setHasMaterials(t.hasMaterials)
+    setMovementType(MOVEMENT_TYPES.includes(t.movementType) ? t.movementType : MOVEMENT_TYPES[0])
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     // The request date is stamped by the server, so it isn't sent from here —
     // that's what stops a request being back- or forward-dated.
-    createTrip.mutate({
+    const data = {
       purpose: fd.get('purpose') as string,
       pickupLocation: fd.get('pickupLocation') as string,
       destinationLocation: fd.get('destinationLocation') as string,
@@ -216,15 +238,21 @@ export default function TripRequestsPage() {
       isDropOff: fd.get('isDropOff') === 'on',
       hasMaterials: fd.get('hasMaterials') === 'on',
       materialDescription: (fd.get('materialDescription') as string)?.trim() || undefined,
-    })
+      ccEmails: (fd.get('ccEmails') as string)?.trim() || undefined,
+    }
+    if (editingTrip) updateTrip.mutate({ id: editingTrip.id, data })
+    else createTrip.mutate(data)
   }
 
   const resetForm = () => {
     setPersonnelCount(1)
     setHasMaterials(false)
     setMovementType(MOVEMENT_TYPES[0])
+    setEditingTrip(null)
     setShowForm(false)
   }
+
+  const e0 = editingTrip   // shorthand for the form's default values
 
   if (isLoading) return <PageLoader />
 
@@ -243,28 +271,39 @@ export default function TripRequestsPage() {
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input w-auto">
             {STATUS_FILTER.map(s => <option key={s} value={s}>{s || 'All Status'}</option>)}
           </select>
-          <button className="btn-primary" onClick={() => setShowForm(!showForm)}>+ New Request</button>
+          <button className="btn-primary" onClick={() => { if (showForm) resetForm(); else setShowForm(true) }}>+ New Request</button>
         </div>
       </div>
 
       {showForm && (
         <div className="card p-5">
-          <h2 className="text-base font-semibold mb-4">New Trip Request</h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h2 className="text-base font-semibold mb-4">
+            {e0 ? 'Edit Trip Request' : 'New Trip Request'}
+          </h2>
+          {e0 && (
+            <p className="text-xs text-gray-500 -mt-3 mb-4">
+              You can change this request until it is approved. The same notice rules apply.
+            </p>
+          )}
+          {/* Keyed on the request so switching between new and edit resets every field. */}
+          <form key={e0?.id ?? 'new'} onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
               <label className="label">Purpose / Description</label>
-              <input name="purpose" className="input" required placeholder="e.g. Material delivery to site" />
+              <input name="purpose" className="input" required placeholder="e.g. Material delivery to site"
+                     defaultValue={e0?.purpose} />
             </div>
             <div>
               <label className="label">Pickup Location</label>
-              <input name="pickupLocation" className="input" list="locations" required placeholder="Start typing or select…" />
+              <input name="pickupLocation" className="input" list="locations" required placeholder="Start typing or select…"
+                     defaultValue={e0?.pickupLocation} />
               <datalist id="locations">
                 {LOCATIONS.map(l => <option key={l} value={l} />)}
               </datalist>
             </div>
             <div>
               <label className="label">Destination</label>
-              <input name="destinationLocation" className="input" list="locations" required placeholder="Start typing or select…" />
+              <input name="destinationLocation" className="input" list="locations" required placeholder="Start typing or select…"
+                     defaultValue={e0?.destinationLocation} />
             </div>
             <div>
               <label className="label">Movement Type</label>
@@ -279,7 +318,7 @@ export default function TripRequestsPage() {
             </div>
             <div>
               <label className="label">Priority</label>
-              <select name="priority" className="input">
+              <select name="priority" className="input" defaultValue={e0?.priority ?? 'Normal'}>
                 <option>Normal</option><option>High</option><option>Urgent</option>
               </select>
             </div>
@@ -293,7 +332,7 @@ export default function TripRequestsPage() {
                 // date to one that is actually allowed, rather than leaving a stale
                 // value the server will reject.
                 key={`departure-${noticeHours}`}
-                defaultValue={defaultDate}
+                defaultValue={e0?.departureDate ?? defaultDate}
                 min={minDate}
                 required
               />
@@ -304,7 +343,8 @@ export default function TripRequestsPage() {
             </div>
             <div>
               <label className="label">Departure Time</label>
-              <input name="departureTime" type="time" className="input" />
+              <input name="departureTime" type="time" className="input"
+                     defaultValue={e0?.departureTime?.slice(0, 5) ?? ''} />
             </div>
 
             {/* ── Personnel travelling ─────────────────────────────────────── */}
@@ -326,7 +366,7 @@ export default function TripRequestsPage() {
             </div>
             <div>
               <label className="label">Category of Personnel</label>
-              <select name="personnelCategory" className="input" defaultValue="">
+              <select name="personnelCategory" className="input" defaultValue={e0?.personnelCategory ?? ''}>
                 <option value="">Select…</option>
                 {PERSONNEL_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
@@ -342,6 +382,7 @@ export default function TripRequestsPage() {
                   rows={2}
                   required
                   placeholder="One name per line, or separated by commas"
+                  defaultValue={e0?.personnelNames ?? ''}
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Required when more than one person is travelling.
@@ -352,14 +393,14 @@ export default function TripRequestsPage() {
             {/* ── Movement detail ──────────────────────────────────────────── */}
             <div>
               <label className="label">Duration of Movement</label>
-              <select name="movementDuration" className="input" defaultValue="">
+              <select name="movementDuration" className="input" defaultValue={e0?.movementDuration ?? ''}>
                 <option value="">Select…</option>
                 {MOVEMENT_DURATIONS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
             <div className="flex items-end pb-2">
               <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" name="isDropOff" className="h-4 w-4" />
+                <input type="checkbox" name="isDropOff" className="h-4 w-4" defaultChecked={e0?.isDropOff ?? false} />
                 Drop Off and Pick Up
               </label>
             </div>
@@ -387,16 +428,27 @@ export default function TripRequestsPage() {
                   className="input"
                   required
                   placeholder="e.g. 4 drums of lubricant, 2 valve assemblies"
+                  defaultValue={e0?.materialDescription ?? ''}
                 />
               </div>
             )}
 
             <div className="md:col-span-2">
               <label className="label">Additional Notes</label>
-              <textarea name="notes" className="input" rows={2} />
+              <textarea name="notes" className="input" rows={2} defaultValue={e0?.notes ?? ''} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="label">Copy updates to (optional)</label>
+              <input name="ccEmails" className="input" defaultValue={e0?.ccEmails ?? ''}
+                     placeholder="e.g. site.contact@desicongroup.com, pa@desicongroup.com" />
+              <p className="text-xs text-gray-500 mt-1">
+                Anyone listed here also receives the confirmation, approval and driver details. Up to 5, separated by commas.
+              </p>
             </div>
             <div className="md:col-span-2 flex gap-3">
-              <button type="submit" className="btn-primary" disabled={createTrip.isPending}>Submit Request</button>
+              <button type="submit" className="btn-primary" disabled={createTrip.isPending || updateTrip.isPending}>
+                {e0 ? 'Save Changes' : 'Submit Request'}
+              </button>
               <button type="button" className="btn-secondary" onClick={resetForm}>Cancel</button>
             </div>
           </form>
@@ -462,6 +514,12 @@ export default function TripRequestsPage() {
                 )}
                 {/* Only the requester or operations staff may cancel — the server
                     refuses anyone else, so don't offer the button to them. */}
+                {/* A request can be corrected until someone acts on it. */}
+                {t.status === 'Pending' && (canApprove || t.requestedById === me?.id) && (
+                  <button className="btn-secondary text-xs" onClick={() => startEdit(t)}>
+                    Edit
+                  </button>
+                )}
                 {(t.status === 'Pending' || t.status === 'Approved' || t.status === 'Active')
                   && (canApprove || t.requestedById === me?.id) && (
                   <button

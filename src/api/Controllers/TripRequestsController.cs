@@ -88,82 +88,20 @@ public class TripRequestsController(
         if (caller == null)
             return Unauthorized(new { error = "Cannot resolve user identity from token" });
 
-        // Vehicle trips are intrastate or interstate. International travel is a
-        // flight and belongs on the Travel Request Form, so it isn't accepted
-        // here. Older trips recorded as International still display normally.
-        if (dto.MovementType is not ("IntraState" or "Interstate"))
-            return BadRequest(new
-            {
-                error = "Movement type must be Intrastate or Interstate. For international travel, " +
-                        "raise a Travel Request instead."
-            });
-
-        // Departure is when they actually travel. DepartureDate arrives as
-        // "yyyy-MM-dd" and DepartureTime as "HH:mm" from the browser inputs.
-        DateOnly? departureDate = DateOnly.TryParse(dto.DepartureDate, out var depDate) ? depDate : null;
-        if (departureDate == null)
-            return BadRequest(new { error = "A departure date is required." });
-
-        // Departure time is optional. When it's left blank, judge the notice rule
-        // on the date alone (end of that day) rather than assuming midnight, so a
-        // request isn't rejected over a time the requester never entered.
-        var departureAt = TimeOnly.TryParse(dto.DepartureTime, out var depTime)
-            ? departureDate.Value.ToDateTime(depTime)
-            : departureDate.Value.ToDateTime(new TimeOnly(23, 59));
-
-        // ── Business rule: minimum notice, by movement type ───────────────────
-        // Intrastate travel needs 4 hours' notice; interstate and international
-        // need 24, since they take longer to resource. Measured against departure,
-        // not a date the requester types, so it cannot be sidestepped. Urgent
-        // priority is exempt for genuine emergencies.
-        var noticeHours = MinimumNoticeHours(dto.MovementType);
-        var isUrgent = string.Equals(dto.Priority, "Urgent", StringComparison.OrdinalIgnoreCase);
-        if (!isUrgent && departureAt < NowInNigeria.AddHours(noticeHours))
-        {
-            return BadRequest(new
-            {
-                error = $"{dto.MovementType} movements need at least {noticeHours} hours' notice. " +
-                        "For shorter notice, set the priority to Urgent."
-            });
-        }
-
-        // ── Personnel details ────────────────────────────────────────────────
-        var personnelCount = dto.PersonnelCount < 1 ? 1 : dto.PersonnelCount;
-        var personnelNames = string.IsNullOrWhiteSpace(dto.PersonnelNames) ? null : dto.PersonnelNames.Trim();
-
-        // Names matter for accountability once more than one person travels.
-        if (personnelCount > 1 && personnelNames == null)
-            return BadRequest(new { error = "Please list the names of everyone travelling when more than one person is on the trip." });
-
-        if (dto.HasMaterials && string.IsNullOrWhiteSpace(dto.MaterialDescription))
-            return BadRequest(new { error = "Please describe the materials travelling with this movement." });
+        var error = ValidateTripInput(dto, out var departureDate, out var ccEmails);
+        if (error != null) return BadRequest(new { error });
 
         var trip = new Models.Entities.TripRequest
         {
             Id                  = Guid.NewGuid(),
             RequestedById       = caller.Id,
-            Purpose             = dto.Purpose,
-            PickupLocation      = dto.PickupLocation,
-            DestinationLocation = dto.DestinationLocation,
             // Server-stamped: the moment the request was raised. Never taken from
             // the client, so it cannot be back- or forward-dated.
             RequestedDateTime   = DateTime.UtcNow,
             Status              = "Pending",   // awaits coordinator/manager approval
-            Priority            = dto.Priority,
-            Notes               = dto.Notes,
-            MovementType        = dto.MovementType,
-            DepartureDate       = departureDate,
-            DepartureTime       = dto.DepartureTime,   // already "HH:mm" — store as-is
-            PersonnelCount      = personnelCount,
-            PersonnelNames      = personnelNames,
-            PersonnelCategory   = string.IsNullOrWhiteSpace(dto.PersonnelCategory) ? null : dto.PersonnelCategory,
-            MovementDuration    = string.IsNullOrWhiteSpace(dto.MovementDuration) ? null : dto.MovementDuration,
-            IsDropOff           = dto.IsDropOff,
-            HasMaterials        = dto.HasMaterials,
-            MaterialDescription = dto.HasMaterials && !string.IsNullOrWhiteSpace(dto.MaterialDescription)
-                                    ? dto.MaterialDescription.Trim() : null,
             CreatedAt           = DateTime.UtcNow
         };
+        ApplyTripInput(trip, dto, departureDate, ccEmails);
 
         db.TripRequests.Add(trip);
         await db.SaveChangesAsync();
@@ -183,6 +121,135 @@ public class TripRequestsController(
             .FirstAsync(x => x.Id == trip.Id);
 
         return CreatedAtAction(nameof(Get), new { id = trip.Id }, ToDto(result));
+    }
+
+    /// <summary>
+    /// Corrects a trip request that is still awaiting approval. The requester
+    /// (or Logistics) can fix a wrong date, location or passenger list without
+    /// cancelling and starting again. Once approved, a driver and vehicle may
+    /// already be committed, so changes after that go through Logistics.
+    /// Same validation as a new request — including the notice rule.
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<TripRequestDto>> Update(Guid id, CreateTripRequestDto dto)
+    {
+        var trip = await db.TripRequests.FirstOrDefaultAsync(t => t.Id == id);
+        if (trip == null) return NotFound();
+
+        var caller = await currentUser.ResolveOrProvisionAsync(User);
+        if (caller == null)
+            return Unauthorized(new { error = "Cannot resolve user identity from token" });
+
+        if (trip.RequestedById != caller.Id && !User.IsOperationsStaff())
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "You can only edit trip requests you raised."
+            });
+
+        if (trip.Status != "Pending")
+            return BadRequest(new
+            {
+                error = "This request has already been actioned and can no longer be edited. " +
+                        "Contact the Logistics team to change it."
+            });
+
+        var error = ValidateTripInput(dto, out var departureDate, out var ccEmails);
+        if (error != null) return BadRequest(new { error });
+
+        ApplyTripInput(trip, dto, departureDate, ccEmails);
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Trip {TripId} edited by {Email} before approval", trip.Id, caller.Email);
+
+        var result = await db.TripRequests
+            .Include(x => x.RequestedBy)
+            .Include(x => x.Assignment).ThenInclude(a => a!.Driver)
+            .Include(x => x.Assignment).ThenInclude(a => a!.Vehicle)
+            .FirstAsync(x => x.Id == id);
+
+        return ToDto(result);
+    }
+
+    /// <summary>
+    /// Shared checks for a new or edited trip request. Returns an error message
+    /// for the requester, or null when the input is acceptable.
+    /// </summary>
+    private static string? ValidateTripInput(CreateTripRequestDto dto, out DateOnly departureDate, out string? ccEmails)
+    {
+        departureDate = default;
+        ccEmails = null;
+
+        // Vehicle trips are intrastate or interstate. International travel is a
+        // flight and belongs on the Travel Request Form.
+        if (dto.MovementType is not ("IntraState" or "Interstate"))
+            return "Movement type must be Intrastate or Interstate. For international travel, raise a Travel Request instead.";
+
+        // DepartureDate arrives as "yyyy-MM-dd", DepartureTime as "HH:mm".
+        if (!DateOnly.TryParse(dto.DepartureDate, out departureDate))
+            return "A departure date is required.";
+
+        // A blank time is judged on the date alone (end of that day) rather than
+        // midnight, so a request isn't rejected over a time nobody entered.
+        var departureAt = TimeOnly.TryParse(dto.DepartureTime, out var depTime)
+            ? departureDate.ToDateTime(depTime)
+            : departureDate.ToDateTime(new TimeOnly(23, 59));
+
+        // Minimum notice: intrastate 4 hours, interstate 24. Measured against
+        // departure; Urgent priority is exempt for genuine emergencies.
+        var noticeHours = MinimumNoticeHours(dto.MovementType);
+        var isUrgent = string.Equals(dto.Priority, "Urgent", StringComparison.OrdinalIgnoreCase);
+        if (!isUrgent && departureAt < NowInNigeria.AddHours(noticeHours))
+            return $"{dto.MovementType} movements need at least {noticeHours} hours' notice. " +
+                   "For shorter notice, set the priority to Urgent.";
+
+        // Names matter for accountability once more than one person travels.
+        if (dto.PersonnelCount > 1 && string.IsNullOrWhiteSpace(dto.PersonnelNames))
+            return "Please list the names of everyone travelling when more than one person is on the trip.";
+
+        if (dto.HasMaterials && string.IsNullOrWhiteSpace(dto.MaterialDescription))
+            return "Please describe the materials travelling with this movement.";
+
+        // Optional extra recipients for the requester's updates — a site
+        // contact, a PA, a line manager. Kept to a few so it isn't used as a
+        // mailing list.
+        if (!string.IsNullOrWhiteSpace(dto.CcEmails))
+        {
+            var list = dto.CcEmails
+                .Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var bad = list.FirstOrDefault(e => !System.Net.Mail.MailAddress.TryCreate(e, out _));
+            if (bad != null) return $"'{bad}' is not a valid email address.";
+            if (list.Count > 5) return "You can copy at most 5 people on a trip request.";
+
+            ccEmails = string.Join("; ", list);
+        }
+
+        return null;
+    }
+
+    /// <summary>Copies the requester-supplied fields onto a trip.</summary>
+    private static void ApplyTripInput(Models.Entities.TripRequest trip, CreateTripRequestDto dto,
+                                       DateOnly departureDate, string? ccEmails)
+    {
+        trip.Purpose             = dto.Purpose;
+        trip.PickupLocation      = dto.PickupLocation;
+        trip.DestinationLocation = dto.DestinationLocation;
+        trip.Priority            = dto.Priority;
+        trip.Notes               = dto.Notes;
+        trip.MovementType        = dto.MovementType;
+        trip.DepartureDate       = departureDate;
+        trip.DepartureTime       = string.IsNullOrWhiteSpace(dto.DepartureTime) ? null : dto.DepartureTime;
+        trip.PersonnelCount      = dto.PersonnelCount < 1 ? 1 : dto.PersonnelCount;
+        trip.PersonnelNames      = string.IsNullOrWhiteSpace(dto.PersonnelNames) ? null : dto.PersonnelNames.Trim();
+        trip.PersonnelCategory   = string.IsNullOrWhiteSpace(dto.PersonnelCategory) ? null : dto.PersonnelCategory;
+        trip.MovementDuration    = string.IsNullOrWhiteSpace(dto.MovementDuration) ? null : dto.MovementDuration;
+        trip.IsDropOff           = dto.IsDropOff;
+        trip.HasMaterials        = dto.HasMaterials;
+        trip.MaterialDescription = dto.HasMaterials && !string.IsNullOrWhiteSpace(dto.MaterialDescription)
+                                     ? dto.MaterialDescription.Trim() : null;
+        trip.CcEmails            = ccEmails;
     }
 
     /// <summary>
@@ -356,23 +423,9 @@ public class TripRequestsController(
 
         if (trip == null) return NotFound();
 
-        trip.Status = "Completed";
-        if (trip.Assignment != null)
-        {
-            trip.Assignment.Status      = "Completed";
-            trip.Assignment.ActualEndTime = DateTime.UtcNow;
-
-            if (trip.Assignment.Driver != null)
-            {
-                trip.Assignment.Driver.DriverStatus     = "Available";
-                trip.Assignment.Driver.LastStatusChange = DateTime.UtcNow;
-            }
-            if (trip.Assignment.Vehicle != null)
-            {
-                trip.Assignment.Vehicle.Status    = "Available";
-                trip.Assignment.Vehicle.UpdatedAt = DateTime.UtcNow;
-            }
-        }
+        // Same completion as the gate closing the movement — and it leaves the
+        // vehicle or driver in use if they're already booked on another trip.
+        await TripCompletion.CompleteAsync(db, trip);
 
         // The register entry was opened when the trip was approved. Close that one
         // rather than adding a second row, so the gate log shows one movement out
@@ -570,6 +623,7 @@ public class TripRequestsController(
             t.MovementDuration,
             t.IsDropOff,
             t.HasMaterials,
-            t.MaterialDescription);
+            t.MaterialDescription,
+            t.CcEmails);
     }
 }

@@ -33,7 +33,7 @@ function KpiCard({ label, value, sub, icon, color = 'blue' }: {
 }
 
 export default function DashboardPage() {
-  const { data: summary, isLoading } = useQuery<DashboardSummary>({
+  const { data: summary, isLoading, isError } = useQuery<DashboardSummary>({
     queryKey: ['dashboard'],
     queryFn: reportsApi.getDashboard,
     refetchInterval: 30_000,
@@ -55,6 +55,20 @@ export default function DashboardPage() {
     refetchInterval: 30_000,
   })
 
+  // A failed load used to leave the spinner running forever, which looked like
+  // the platform was down. Say what happened and point to the working pages.
+  if (isError) return (
+    <div className="card p-6 max-w-xl">
+      <h1 className="text-lg font-semibold mb-2">The dashboard couldn't be loaded</h1>
+      <p className="text-sm text-gray-600 mb-4">
+        You're still signed in. Use the menu to go to your approvals, or refresh the page to try again.
+      </p>
+      <div className="flex gap-3">
+        <Link to="/travel" className="btn-primary text-sm">Travel Requests</Link>
+        <Link to="/trips" className="btn-secondary text-sm">Trip Requests</Link>
+      </div>
+    </div>
+  )
   if (isLoading || !summary) return <PageLoader />
 
   const driverData = [

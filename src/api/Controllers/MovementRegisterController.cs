@@ -15,6 +15,7 @@ public class MovementRegisterController(
     AppDbContext db,
     ICurrentUserService currentUser,
     IAuditService audit,
+    INotificationService notifications,
     ILogger<MovementRegisterController> logger) : ControllerBase
 {
     [HttpGet]
@@ -257,7 +258,22 @@ public class MovementRegisterController(
         if (changes.Count == 0)
             return Ok(new { message = "No changes were made." });
 
+        // Closing an entry through the edit panel ends its trip the same way the
+        // Close button does.
+        TripRequest? completedTrip = null;
+        if (dto.Status == "Closed" && changes.Any(c => c.StartsWith("Status:")))
+        {
+            completedTrip = await TripCompletion.FindLiveTripForMovementAsync(db, entry);
+            if (completedTrip != null) await TripCompletion.CompleteAsync(db, completedTrip, entry.MileageIn);
+        }
+
         await db.SaveChangesAsync();
+
+        if (completedTrip != null)
+        {
+            try { await notifications.SendTripCompletedAsync(completedTrip); }
+            catch (Exception ex) { logger.LogError(ex, "Trip completed notification failed for {TripId}", completedTrip.Id); }
+        }
 
         var reason = string.IsNullOrWhiteSpace(dto.CorrectionReason) ? "No reason given" : dto.CorrectionReason.Trim();
         await audit.LogAsync("MovementRegister", id.ToString(), "Corrected",
@@ -280,7 +296,22 @@ public class MovementRegisterController(
         entry.ReturnDateTime = dto.ReturnDateTime;
         if (dto.MileageIn.HasValue) entry.MileageIn = dto.MileageIn;
         entry.Status = "Closed";
+
+        // The vehicle is back at the gate, so its trip is over — complete it and
+        // free the vehicle and driver. Without this they stayed "in use" until
+        // someone remembered to press Complete on the trip, which nobody did.
+        var trip = await TripCompletion.FindLiveTripForMovementAsync(db, entry);
+        if (trip != null) await TripCompletion.CompleteAsync(db, trip, entry.MileageIn);
+
         await db.SaveChangesAsync();
+
+        if (trip != null)
+        {
+            logger.LogInformation("Trip {TripId} completed by gate closing movement {MovementId}", trip.Id, id);
+            try { await notifications.SendTripCompletedAsync(trip); }
+            catch (Exception ex) { logger.LogError(ex, "Trip completed notification failed for {TripId}", trip.Id); }
+        }
+
         return NoContent();
     }
 

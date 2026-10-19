@@ -24,7 +24,8 @@ public record TripRequestDto(
     string? MovementDuration,
     bool IsDropOff,
     bool HasMaterials,
-    string? MaterialDescription
+    string? MaterialDescription,
+    string? CcEmails = null
 );
 
 public record AssignmentSummaryDto(
@@ -54,7 +55,8 @@ public record CreateTripRequestDto(
     string? MovementDuration = null,
     bool IsDropOff = false,
     bool HasMaterials = false,
-    string? MaterialDescription = null
+    string? MaterialDescription = null,
+    string? CcEmails = null   // optional extra recipients, comma- or semicolon-separated
     // NOTE: RequestedDateTime is deliberately absent — the server stamps it at
     // submission so a request cannot be back- or forward-dated.
 );

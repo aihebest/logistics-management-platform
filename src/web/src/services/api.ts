@@ -148,6 +148,8 @@ export interface TripRequest {
   isDropOff: boolean
   hasMaterials: boolean
   materialDescription?: string
+  /** Extra people copied on this request's emails — "a@x.com; b@x.com". */
+  ccEmails?: string
 }
 
 export interface AssignmentSummary {
@@ -619,6 +621,8 @@ export const tripsApi = {
     api.get<TripRequest[]>('/trips', { params: { status, movementType } }).then(r => r.data),
   get: (id: string) => api.get<TripRequest>(`/trips/${id}`).then(r => r.data),
   create: (data: object) => api.post<TripRequest>('/trips', data).then(r => r.data),
+  /** Correct a request while it is still Pending (requester or Logistics). */
+  update: (id: string, data: object) => api.put<TripRequest>(`/trips/${id}`, data).then(r => r.data),
   cancel: (id: string) => api.patch(`/trips/${id}/cancel`),
   /** Approve a pending request. Omit driver/vehicle to let the engine auto-assign. */
   approve: (id: string, data?: { driverId?: string; vehicleId?: string }) =>

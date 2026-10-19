@@ -139,6 +139,19 @@ public class NotificationService(
             : $"{trip.DepartureDate:ddd dd MMM yyyy}" +
               (string.IsNullOrWhiteSpace(trip.DepartureTime) ? "" : $" at {trip.DepartureTime[..Math.Min(5, trip.DepartureTime.Length)]}");
 
+    /// <summary>
+    /// The requester plus anyone they chose to copy on the request — the people
+    /// who need to know what's happening with the trip.
+    /// </summary>
+    private static List<string> RequesterAndCc(TripRequest trip)
+    {
+        var list = new List<string>();
+        if (trip.RequestedBy?.Email is { Length: > 0 } e) list.Add(e);
+        if (!string.IsNullOrWhiteSpace(trip.CcEmails))
+            list.AddRange(trip.CcEmails.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     public async Task SendTripRequestSubmittedAsync(TripRequest trip)
     {
         var requester = trip.RequestedBy;
@@ -172,8 +185,9 @@ public class NotificationService(
             $"New request from {requester?.FullName}: {trip.Purpose} — {trip.PickupLocation} → {trip.DestinationLocation}",
             "TripRequest", trip.Id.ToString());
 
-        // Send confirmation to the requester
-        if (requester?.Email is { Length: > 0 } requesterEmail)
+        // Send confirmation to the requester, and anyone they copied
+        var confirmTo = RequesterAndCc(trip);
+        if (confirmTo.Count > 0 && requester != null)
         {
             var confirmSubject = $"Trip Request Received — Ref: {trip.Id.ToString()[..8].ToUpper()}";
             var confirmBody    = $"""
@@ -191,7 +205,7 @@ public class NotificationService(
 
                 {PlatformUrl()}
                 """;
-            await SendEmailAsync(requesterEmail, confirmSubject, confirmBody);
+            await SendEmailToManyAsync(confirmTo, confirmSubject, confirmBody);
         }
 
         logger.LogInformation("Trip request submitted notifications sent for {TripId}", trip.Id);
@@ -200,7 +214,8 @@ public class NotificationService(
     public async Task SendTripRequestApprovedAsync(TripRequest trip)
     {
         var requester = trip.RequestedBy;
-        if (requester?.Email is not { Length: > 0 } to) return;
+        var to = RequesterAndCc(trip);
+        if (requester == null || to.Count == 0) return;
 
         var assignment = trip.Assignment;
         var subject    = $"Trip Approved & Driver Assigned — {trip.Purpose}";
@@ -215,6 +230,7 @@ public class NotificationService(
             Destination: {trip.DestinationLocation}
             Departure:   {DepartureText(trip)}
             Driver:      {assignment?.Driver?.FullName ?? "To be confirmed"}
+            Driver Tel:  {(string.IsNullOrWhiteSpace(assignment?.Driver?.PhoneNumber) ? "Contact the logistics coordinator" : assignment!.Driver!.PhoneNumber)}
             Vehicle:     {(assignment?.Vehicle != null ? $"{assignment.Vehicle.Make} {assignment.Vehicle.Model} ({assignment.Vehicle.RegistrationNo})" : "To be confirmed")}
 
             Please be at the pickup location on time. Contact the logistics coordinator if you have any questions.
@@ -222,7 +238,7 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        await SendEmailAsync(to, subject, body);
+        await SendEmailToManyAsync(to, subject, body);
         await NotifyInAppAsync(requester.Id, "TripRequestApproved", subject,
             $"Your trip request has been approved. Driver: {assignment?.Driver?.FullName ?? "TBC"}",
             "TripRequest", trip.Id.ToString());
@@ -233,7 +249,8 @@ public class NotificationService(
     public async Task SendTripRequestRejectedAsync(TripRequest trip, string reason)
     {
         var requester = trip.RequestedBy;
-        if (requester?.Email is not { Length: > 0 } to) return;
+        var to = RequesterAndCc(trip);
+        if (requester == null || to.Count == 0) return;
 
         var subject = $"Trip Request Update — {trip.Purpose}";
         var body    = $"""
@@ -251,7 +268,7 @@ public class NotificationService(
             {PlatformUrl()}
             """;
 
-        await SendEmailAsync(to, subject, body);
+        await SendEmailToManyAsync(to, subject, body);
         await NotifyInAppAsync(requester.Id, "TripRequestRejected", subject,
             $"Your trip request could not be processed: {reason}",
             "TripRequest", trip.Id.ToString());
@@ -340,6 +357,7 @@ public class NotificationService(
             Departure:   {DepartureText(assignment.TripRequest)}
             Vehicle:     {assignment.Vehicle.Make} {assignment.Vehicle.Model} ({assignment.Vehicle.RegistrationNo})
             Requested By:{assignment.TripRequest.RequestedBy?.FullName ?? "Unknown"}
+            Their Tel:   {assignment.TripRequest.RequestedBy?.PhoneNumber ?? "Not on record — ask the logistics coordinator"}
 
             Please update your status on the platform once the trip is underway, and again when it is complete.
 

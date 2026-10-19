@@ -82,6 +82,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.PersonnelCategory).HasMaxLength(50);
             e.Property(x => x.MovementDuration).HasMaxLength(50);
             e.Property(x => x.MaterialDescription).HasMaxLength(500);
+            e.Property(x => x.CcEmails).HasMaxLength(600);
             e.HasOne(x => x.RequestedBy)
              .WithMany()
              .HasForeignKey(x => x.RequestedById)

@@ -7,7 +7,9 @@ namespace LogisticsApi.Controllers;
 
 [ApiController]
 [Route("api/reports")]
-[Authorize(Roles = "Manager,Admin")]
+// Roles are set per action. A class-level role list would be ANDed with each
+// action's, which silently locked Management-only users out of the dashboard.
+[Authorize]
 public class ReportsController(IReportingService reporting) : ControllerBase
 {
     [HttpGet("dashboard")]
@@ -19,6 +21,7 @@ public class ReportsController(IReportingService reporting) : ControllerBase
         => await reporting.GetDashboardSummaryAsync();
 
     [HttpGet("vehicles/export")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> ExportVehicles([FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
         var bytes = await reporting.ExportVehicleReportAsync(
@@ -28,6 +31,7 @@ public class ReportsController(IReportingService reporting) : ControllerBase
     }
 
     [HttpGet("drivers/export")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> ExportDrivers([FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
         var bytes = await reporting.ExportDriverReportAsync(
@@ -41,6 +45,7 @@ public class ReportsController(IReportingService reporting) : ControllerBase
     /// Fuel Logs page so the file matches whatever the user has on screen.
     /// </summary>
     [HttpGet("fuel/export")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> ExportFuel(
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
@@ -61,6 +66,7 @@ public class ReportsController(IReportingService reporting) : ControllerBase
     }
 
     [HttpGet("maintenance/export")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> ExportMaintenance([FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
         var bytes = await reporting.ExportMaintenanceReportAsync(

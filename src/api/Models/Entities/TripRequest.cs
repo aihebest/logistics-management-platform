@@ -38,6 +38,12 @@ public class TripRequest
     // ── Materials carried ────────────────────────────────────────────────────
     public bool HasMaterials { get; set; }
     public string? MaterialDescription { get; set; }
+
+    /// <summary>
+    /// Optional extra people copied on the requester's updates — a site contact,
+    /// a PA, a line manager — stored as "a@x.com; b@x.com". Up to five.
+    /// </summary>
+    public string? CcEmails { get; set; }
     public string Status { get; set; } = "Pending";           // Pending | Active | Ongoing | Completed | Cancelled | Unattended
     public string Priority { get; set; } = "Normal";          // Normal | High | Urgent
     public string? Notes { get; set; }
