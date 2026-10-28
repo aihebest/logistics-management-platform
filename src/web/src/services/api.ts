@@ -404,6 +404,8 @@ export interface Department {
   isExecutive: boolean
   deputyHodUserId?: string
   deputyHodName?: string
+  /** Overhead: travel for non-employees, approved by the head (the DMD). */
+  isOverhead?: boolean
 }
 
 /** A parcel sent by courier — documents, plaques, certificates. */
@@ -494,6 +496,9 @@ export interface TravelRequest {
   rejectionReason?: string
   rejectedAt?: string
   createdAt: string
+  /** Overhead (non-employee) travel: who the traveller represents. */
+  travellerOrganisation?: string
+  isOverhead?: boolean
 }
 
 export interface ProjectMaterialTracking {

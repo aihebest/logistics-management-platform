@@ -96,7 +96,12 @@ export default function TravelRequestPage() {
     onSuccess: (r: TravelRequest) => {
       refresh()
       setShowForm(false)
-      toast.success(`${r.formNumber} submitted — sent to your head of department`)
+      toast.success(
+        r.isOverhead
+          ? `${r.formNumber} submitted — sent to the DMD for approval`
+          : r.status === 'PendingApproval'
+            ? `${r.formNumber} submitted — sent to management for approval`
+            : `${r.formNumber} submitted — sent to your head of department`)
     },
     onError: err => toast.error(apiErrorMessage(err, 'Failed to submit travel request'), { duration: 7000 }),
   })
@@ -177,7 +182,12 @@ export default function TravelRequestPage() {
 
         {showForm && (
           <NewRequestForm
-            departments={departments.map(d => d.name)}
+            // Overhead sits at the bottom, apart from the real departments.
+            departments={[
+              ...departments.filter(d => !d.isOverhead).map(d => d.name),
+              ...departments.filter(d => d.isOverhead).map(d => d.name),
+            ]}
+            overheadDepartments={departments.filter(d => d.isOverhead).map(d => d.name)}
             me={me}
             pending={create.isPending}
             onCancel={() => setShowForm(false)}
@@ -193,6 +203,11 @@ export default function TravelRequestPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-bold text-gray-900">{r.formNumber}</span>
                     <span className="text-sm text-gray-700">{r.givenName} {r.surname}</span>
+                    {r.isOverhead && (
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                        Overhead · {r.travellerOrganisation}
+                      </span>
+                    )}
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_STYLE[r.status] ?? 'bg-gray-100 text-gray-700'}`}>
                       {STATUS_LABEL[r.status] ?? r.status}
                     </span>
@@ -220,6 +235,7 @@ export default function TravelRequestPage() {
                     {r.department}
                     {r.position && ` · ${r.position}`}
                     {' · raised '}{format(new Date(r.formDate), 'dd MMM yyyy')}
+                    {r.isOverhead && ` by ${r.requestedByName}`}
                   </p>
 
                   {r.verifiedByName && (
@@ -304,6 +320,8 @@ export default function TravelRequestPage() {
 
 interface NewRequestFormProps {
   departments: string[]
+  /** Departments for non-employee travel — the traveller fields start blank. */
+  overheadDepartments: string[]
   me?: { fullName: string; email: string; phoneNumber?: string; departmentName?: string; position?: string }
   pending: boolean
   onCancel: () => void
@@ -314,7 +332,12 @@ interface NewRequestFormProps {
  * Laid out in the same order as the paper form so anyone who knows the
  * original can fill this in without rereading it.
  */
-function NewRequestForm({ departments, me, pending, onCancel, onSubmit }: NewRequestFormProps) {
+function NewRequestForm({ departments, overheadDepartments, me, pending, onCancel, onSubmit }: NewRequestFormProps) {
+  // Overhead is travel for someone outside the company, so the signed-in
+  // user's own details must not be pre-filled as the traveller's.
+  const [department, setDepartment] = useState(me?.departmentName ?? '')
+  const isOverhead = overheadDepartments.includes(department)
+
   // Split the signed-in user's name for the Surname / Given Name boxes. The
   // guess is editable, since name order varies.
   const nameParts = (me?.fullName ?? '').trim().split(/\s+/)
@@ -368,6 +391,9 @@ function NewRequestForm({ departments, me, pending, onCancel, onSubmit }: NewReq
       purposeOfTravel: fd.get('purposeOfTravel') as string,
       hotelBookingRequired: fd.get('hotelBookingRequired') === 'Yes',
       otherInformation: (fd.get('otherInformation') as string)?.trim() || undefined,
+      travellerOrganisation: isOverhead
+        ? (fd.get('travellerOrganisation') as string)?.trim() || undefined
+        : undefined,
       legs,
     })
   }
@@ -454,34 +480,56 @@ function NewRequestForm({ departments, me, pending, onCancel, onSubmit }: NewReq
           <label className="label">Project / Cost Center Code</label>
           <input name="projectCostCentreCode" className="input" placeholder="Optional" />
         </div>
-        <div>
+        {/* Keyed on Overhead so switching to or from it resets the traveller
+            fields — blank for a guest, the signed-in user's own otherwise. */}
+        <div key={`surname-${isOverhead}`}>
           <label className="label">Surname <span className="text-red-500">*</span></label>
-          <input name="surname" className="input" required defaultValue={defaultSurname} />
+          <input name="surname" className="input" required defaultValue={isOverhead ? '' : defaultSurname} />
         </div>
-        <div>
+        <div key={`given-${isOverhead}`}>
           <label className="label">Given Name <span className="text-red-500">*</span></label>
-          <input name="givenName" className="input" required defaultValue={defaultGiven} />
+          <input name="givenName" className="input" required defaultValue={isOverhead ? '' : defaultGiven} />
         </div>
 
         <div>
           <label className="label">Department <span className="text-red-500">*</span></label>
-          <select name="department" className="input" required defaultValue={me?.departmentName ?? ''}>
+          <select name="department" className="input" required
+                  value={department} onChange={e => setDepartment(e.target.value)}>
             <option value="">Select department…</option>
-            {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            {departments.map(d => (
+              <option key={d} value={d}>
+                {overheadDepartments.includes(d) ? `${d} (non-employee travel)` : d}
+              </option>
+            ))}
           </select>
         </div>
-        <div>
+        <div key={`position-${isOverhead}`}>
           <label className="label">Position</label>
-          <input name="position" className="input" defaultValue={me?.position ?? ''} />
+          <input name="position" className="input" defaultValue={isOverhead ? '' : me?.position ?? ''} />
         </div>
-        <div>
+        <div key={`phone-${isOverhead}`}>
           <label className="label">Phone No</label>
-          <input name="phoneNumber" className="input" defaultValue={me?.phoneNumber ?? ''} />
+          <input name="phoneNumber" className="input" defaultValue={isOverhead ? '' : me?.phoneNumber ?? ''} />
         </div>
 
-        <div className="md:col-span-2">
+        {isOverhead && (
+          <div className="md:col-span-3 rounded bg-orange-50 border border-orange-200 p-3 space-y-2">
+            <p className="text-xs text-orange-800">
+              <strong>Overhead travel</strong> is for someone outside the company. Enter the
+              traveller's own details. It goes straight to the DMD for approval, and is
+              recorded as raised by you.
+            </p>
+            <div>
+              <label className="label">Organisation / Company <span className="text-red-500">*</span></label>
+              <input name="travellerOrganisation" className="input" required
+                     placeholder="e.g. client, consultant firm or partner the traveller represents" />
+            </div>
+          </div>
+        )}
+
+        <div className="md:col-span-2" key={`email-${isOverhead}`}>
           <label className="label">Email</label>
-          <input name="email" type="email" className="input" defaultValue={me?.email ?? ''} />
+          <input name="email" type="email" className="input" defaultValue={isOverhead ? '' : me?.email ?? ''} />
         </div>
         <div>
           <label className="label">Hotel Booking Required?</label>

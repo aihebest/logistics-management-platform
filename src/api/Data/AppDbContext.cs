@@ -253,6 +253,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Position).HasMaxLength(100);
             e.Property(x => x.PhoneNumber).HasMaxLength(50);
             e.Property(x => x.Email).HasMaxLength(256);
+            e.Property(x => x.TravellerOrganisation).HasMaxLength(200);
             e.Property(x => x.PurposeOfTravel).HasMaxLength(1000);
             e.Property(x => x.OtherInformation).HasMaxLength(1000);
             e.Property(x => x.Status).HasMaxLength(30);

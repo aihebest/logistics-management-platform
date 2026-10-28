@@ -104,6 +104,15 @@ public class TravelRequestController(
         if (department == null)
             return BadRequest(new { error = $"'{dto.Department}' is not a recognised department." });
 
+        // Overhead is for people outside the company, so cost control needs to
+        // know who they represent.
+        var organisation = Trim(dto.TravellerOrganisation);
+        if (department.IsOverhead && organisation == null)
+            return BadRequest(new
+            {
+                error = "For Overhead travel, enter the organisation or company the traveller represents."
+            });
+
         var request = new TravelRequest
         {
             Id                    = Guid.NewGuid(),
@@ -117,7 +126,8 @@ public class TravelRequestController(
             Position              = Trim(dto.Position),
             PhoneNumber           = Trim(dto.PhoneNumber),
             Email                 = Trim(dto.Email),
-            PurposeOfTravel       = dto.PurposeOfTravel.Trim(),
+            TravellerOrganisation = department.IsOverhead ? organisation : null,
+            PurposeOfTravel      = dto.PurposeOfTravel.Trim(),
             HotelBookingRequired  = dto.HotelBookingRequired,
             OtherInformation      = Trim(dto.OtherInformation),
             CreatedAt             = DateTime.UtcNow,
@@ -135,7 +145,12 @@ public class TravelRequestController(
         // Directors' travel (the Executive Management department) has no
         // verification stage either — directors are the heads — and goes to a
         // named approver rather than management generally.
-        request.Status = raisedByTheHead || department.IsExecutive ? "PendingApproval" : "PendingVerification";
+        //
+        // Overhead (non-employee) travel has no verification stage either — the
+        // traveller has no head of department here. It goes to the DMD, and any
+        // other member of management may approve it when he is away.
+        request.Status = raisedByTheHead || department.IsExecutive || department.IsOverhead
+            ? "PendingApproval" : "PendingVerification";
 
         var outboundSeq = 0;
         var inboundSeq  = 0;
@@ -170,6 +185,14 @@ public class TravelRequestController(
                 var approverId = ExecutiveApproverId(department, request.RequestedById);
                 var approver = approverId.HasValue ? await db.Users.FindAsync(approverId.Value) : null;
                 await notifications.SendExecutiveTravelForApprovalAsync(request, approver);
+            }
+            else if (department.IsOverhead && !raisedByTheHead)
+            {
+                // To the DMD. If he isn't assigned, the email falls back to
+                // the staff-travel approvers so it is never left unseen.
+                var approver = department.HodUserId.HasValue
+                    ? await db.Users.FindAsync(department.HodUserId.Value) : null;
+                await notifications.SendOverheadTravelForApprovalAsync(request, approver);
             }
             else if (raisedByTheHead)
                 await notifications.SendTravelRequestVerifiedAsync(request);   // straight to management
@@ -559,5 +582,7 @@ public class TravelRequestController(
         r.ApprovalNotes,
         r.RejectionReason,
         r.RejectedAt,
-        r.CreatedAt);
+        r.CreatedAt,
+        r.TravellerOrganisation,
+        r.TravellerOrganisation != null);
 }

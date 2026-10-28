@@ -13,7 +13,9 @@ public record DepartmentDto(
     // Executive department only: the head is the MD, the deputy the DMD.
     bool IsExecutive = false,
     Guid? DeputyHodUserId = null,
-    string? DeputyHodName = null
+    string? DeputyHodName = null,
+    // Overhead: travel for non-employees, approved by the head (the DMD).
+    bool IsOverhead = false
 );
 
 public record CreateDepartmentDto(string Name, Guid? HodUserId = null);
@@ -143,7 +145,11 @@ public record TravelRequestDto(
     string? RejectionReason,
     DateTime? RejectedAt,
 
-    DateTime CreatedAt
+    DateTime CreatedAt,
+
+    // Overhead (non-employee) travel only
+    string? TravellerOrganisation = null,
+    bool IsOverhead = false
 );
 
 /// <summary>
@@ -162,7 +168,8 @@ public record CreateTravelRequestDto(
     string? PhoneNumber = null,
     string? Email = null,
     bool HotelBookingRequired = false,
-    string? OtherInformation = null
+    string? OtherInformation = null,
+    string? TravellerOrganisation = null   // required when Department is Overhead
 );
 
 public record CreateTravelLegDto(

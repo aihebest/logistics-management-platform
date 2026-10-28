@@ -33,6 +33,12 @@ public class TravelRequest
     public string? PhoneNumber { get; set; }
     public string? Email { get; set; }
 
+    /// <summary>
+    /// Overhead requests only: the company or body a non-employee traveller
+    /// represents, so cost control can see who the spend was for.
+    /// </summary>
+    public string? TravellerOrganisation { get; set; }
+
     public string PurposeOfTravel { get; set; } = string.Empty;
 
     // ── Routing ──────────────────────────────────────────────────────────────

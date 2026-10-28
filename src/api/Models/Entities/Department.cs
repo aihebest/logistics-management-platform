@@ -39,6 +39,15 @@ public class Department
     /// </summary>
     public bool IsExecutive { get; set; }
 
+    /// <summary>
+    /// Marks the Overhead cost centre — travel for people outside the company
+    /// (consultants, client and partner representatives, visitors). Any staff
+    /// member may raise it; there is no verification stage, and it goes to the
+    /// head (the DMD) for approval. Any other member of management may approve
+    /// it when the DMD is away, as with staff travel.
+    /// </summary>
+    public bool IsOverhead { get; set; }
+
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
 

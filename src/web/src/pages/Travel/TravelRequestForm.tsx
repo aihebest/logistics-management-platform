@@ -201,6 +201,15 @@ export default function TravelRequestForm({ request: r, executive = false, onClo
               <td className="trf-cell trf-label">EMAIL :</td>
               <td className="trf-cell">{r.email ?? ''}</td>
             </tr>
+            {/* Overhead travel is for non-employees — say who they represent. */}
+            {r.isOverhead && (
+              <tr>
+                <td className="trf-cell trf-label">ORGANISATION:</td>
+                <td className="trf-cell" colSpan={3}>
+                  {r.travellerOrganisation ?? ''} (non-employee — raised by {r.requestedByName})
+                </td>
+              </tr>
+            )}
             <tr>
               <td className="trf-cell trf-label">ADDRESS:</td>
               <td className="trf-cell" colSpan={3}>6B Oko Awo Street, VI Lagos</td>
@@ -290,7 +299,8 @@ export default function TravelRequestForm({ request: r, executive = false, onClo
           <tbody>
             <tr>
               <SignatureBlock
-                name={`${r.givenName} ${r.surname}`.trim()}
+                // A guest doesn't sign — the staff member who raised it does.
+                name={r.isOverhead ? `${r.requestedByName} (on behalf)` : `${r.givenName} ${r.surname}`.trim()}
                 at={r.formDate}
                 placeholder="Awaiting submission"
               />
@@ -305,6 +315,8 @@ export default function TravelRequestForm({ request: r, executive = false, onClo
                 placeholder={
                   executive
                     ? "Not required — director's travel"
+                    : r.isOverhead
+                      ? 'Not required — Overhead (non-employee) travel'
                     : r.status === 'PendingVerification'
                       ? 'Awaiting verification by Head of Department'
                       : 'Not required — raised by the Head of Department'

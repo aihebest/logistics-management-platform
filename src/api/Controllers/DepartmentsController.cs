@@ -46,7 +46,8 @@ public class DepartmentsController(
                 d.Members.Count(m => m.IsActive),
                 d.IsExecutive,
                 d.DeputyHodUserId,
-                d.DeputyHod != null ? d.DeputyHod.FullName : null))
+                d.DeputyHod != null ? d.DeputyHod.FullName : null,
+                d.IsOverhead))
             .ToListAsync();
     }
 
@@ -171,6 +172,6 @@ public class DepartmentsController(
         return new DepartmentDto(
             d.Id, d.Name, d.HodUserId, d.Hod?.FullName, d.Hod?.Email, d.IsActive,
             await db.Users.CountAsync(u => u.DepartmentId == d.Id && u.IsActive),
-            d.IsExecutive, d.DeputyHodUserId, d.DeputyHod?.FullName);
+            d.IsExecutive, d.DeputyHodUserId, d.DeputyHod?.FullName, d.IsOverhead);
     }
 }

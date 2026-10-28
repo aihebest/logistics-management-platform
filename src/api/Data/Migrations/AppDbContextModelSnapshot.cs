@@ -184,6 +184,7 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<Guid?>("HodUserId").HasColumnType("uniqueidentifier");
                 b.Property<Guid?>("DeputyHodUserId").HasColumnType("uniqueidentifier");
                 b.Property<bool>("IsExecutive").HasColumnType("bit");
+                b.Property<bool>("IsOverhead").HasColumnType("bit");
                 b.Property<bool>("IsActive").HasColumnType("bit");
                 b.Property<DateTime>("CreatedAt").HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
                 b.HasKey("Id");
@@ -204,6 +205,7 @@ namespace LogisticsApi.Data.Migrations
                 b.Property<string>("Position").HasMaxLength(100).HasColumnType("nvarchar(100)");
                 b.Property<string>("PhoneNumber").HasMaxLength(50).HasColumnType("nvarchar(50)");
                 b.Property<string>("Email").HasMaxLength(256).HasColumnType("nvarchar(256)");
+                b.Property<string>("TravellerOrganisation").HasMaxLength(200).HasColumnType("nvarchar(200)");
                 b.Property<string>("PurposeOfTravel").IsRequired().HasMaxLength(1000).HasColumnType("nvarchar(1000)");
                 b.Property<bool>("HotelBookingRequired").HasColumnType("bit");
                 b.Property<string>("OtherInformation").HasMaxLength(1000).HasColumnType("nvarchar(1000)");

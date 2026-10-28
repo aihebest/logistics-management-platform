@@ -48,6 +48,7 @@ public interface INotificationService
     Task SendTravelDeskSubmittedAsync(TravelRequest request);
     /// <summary>A director's travel, to the MD — or the DMD when the MD is travelling.</summary>
     Task SendExecutiveTravelForApprovalAsync(TravelRequest request, User? approver);
+    Task SendOverheadTravelForApprovalAsync(TravelRequest request, User? approver);
     Task SendTravelRequestApprovedAsync(TravelRequest request);
     Task SendTravelRequestRejectedAsync(TravelRequest request, string rejectedByName);
     Task SendMaintenanceOverdueAsync(MaintenanceRecord record);
@@ -640,7 +641,13 @@ public class NotificationService(
             : $"{first.From} → {first.To} on {first.TravelDate:dd MMM yyyy}";
     }
 
-    private static string TravellerName(TravelRequest r) => $"{r.GivenName} {r.Surname}".Trim();
+    // Overhead travellers are outsiders, so their organisation goes with the
+    // name in every email — otherwise "John Okafor" means nothing to the reader.
+    private static string TravellerName(TravelRequest r)
+    {
+        var name = $"{r.GivenName} {r.Surname}".Trim();
+        return string.IsNullOrWhiteSpace(r.TravellerOrganisation) ? name : $"{name} ({r.TravellerOrganisation})";
+    }
 
     /// <summary>
     /// A submitted form is waiting on the head of the requester's department.
@@ -804,6 +811,71 @@ public class NotificationService(
         return (await GetEmailsForRolesAsync("Management"))
             .Where(e => !string.Equals(e, mdEmail, StringComparison.OrdinalIgnoreCase))
             .ToList();
+    }
+
+    /// <summary>
+    /// Overhead travel — a non-employee travelling at company expense. Sent to
+    /// the DMD as the named approver. Other members of management can still
+    /// approve it from the platform when he is away, as with staff travel. Falls
+    /// back to the staff-travel approvers if no DMD is set on the Overhead
+    /// department, so it is never left unseen.
+    /// </summary>
+    public async Task SendOverheadTravelForApprovalAsync(TravelRequest request, User? approver)
+    {
+        var subject = $"Overhead Travel for Approval — {request.FormNumber} ({TravellerName(request)})";
+        var body    = $"""
+            A travel request for someone outside the company needs your approval.
+            It will be charged to Overhead.
+
+            Form No:      {request.FormNumber}
+            Traveller:    {request.GivenName} {request.Surname}
+            Organisation: {request.TravellerOrganisation ?? "Not stated"}
+            Raised by:    {request.RequestedBy?.FullName ?? "—"}
+            Journey:      {TravelSummary(request)}
+            Purpose:      {request.PurposeOfTravel}
+            Hotel:        {(request.HotelBookingRequired ? "Required" : "Not required")}
+            Cost Centre:  {request.ProjectCostCentreCode ?? "Not stated"}
+
+            Overhead travel has no head-of-department verification, so your
+            approval is the sign-off on this form.
+
+            {PlatformUrl()}
+            """;
+
+        if (approver is { Email.Length: > 0 })
+        {
+            await SendEmailAsync(approver.Email, subject, body);
+            await NotifyInAppAsync(approver.Id, "TravelRequestForApproval", subject,
+                $"{TravellerName(request)} — {TravelSummary(request)}",
+                "TravelRequest", request.Id.ToString());
+            logger.LogInformation("Overhead travel {Form} sent to {Email} for approval",
+                request.FormNumber, approver.Email);
+        }
+        else
+        {
+            logger.LogWarning(
+                "Overhead travel {Form}: no approver set on the Overhead department, so it has gone to " +
+                "the staff-travel approvers. Set the DMD as its head on the Departments screen.", request.FormNumber);
+            var approvers = await GetStaffTravelApproverEmailsAsync();
+            if (approvers.Count > 0) await SendEmailToManyAsync(approvers, subject, body);
+        }
+
+        if (request.RequestedBy?.Email is { Length: > 0 } requesterEmail)
+        {
+            await SendEmailAsync(requesterEmail,
+                $"Travel Request Submitted — {request.FormNumber}",
+                $"""
+                Hi {request.RequestedBy.FullName},
+
+                The Overhead travel request for {TravellerName(request)} has been
+                submitted for approval by {approver?.FullName ?? "management"}.
+
+                Form No:  {request.FormNumber}
+                Journey:  {TravelSummary(request)}
+
+                {PlatformUrl()}
+                """);
+        }
     }
 
     /// <summary>
