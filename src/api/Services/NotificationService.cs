@@ -670,7 +670,7 @@ public class NotificationService(
 
             Once you verify it, the request goes to management for final approval.
 
-            {PlatformUrl()}
+            {TravelApprovalLink(request).Replace("To approve or reject", "To verify or reject")}
             """;
 
         if (hod is { Email.Length: > 0 })
@@ -756,7 +756,7 @@ public class NotificationService(
 
             {verificationLines}
 
-            {PlatformUrl()}
+            {TravelApprovalLink(request)}
             """;
 
         // Staff travel goes to the staff-travel approvers only. The MD holds the
@@ -839,7 +839,7 @@ public class NotificationService(
             Overhead travel has no head-of-department verification, so your
             approval is the sign-off on this form.
 
-            {PlatformUrl()}
+            {TravelApprovalLink(request)}
             """;
 
         if (approver is { Email.Length: > 0 })
@@ -900,7 +900,7 @@ public class NotificationService(
             Directors' travel has no head-of-department verification, so your
             approval is the sign-off on this form.
 
-            {PlatformUrl()}
+            {TravelApprovalLink(request)}
             """;
 
         if (approver is { Email.Length: > 0 })
@@ -1537,6 +1537,20 @@ public class NotificationService(
     {
         var url = config["App:BaseUrl"] ?? "https://logistics.desiconapp.com";
         return $"Platform: {url}";
+    }
+
+    /// <summary>
+    /// A direct link to one travel request, where the Approve button is. The
+    /// bare platform link left approvers on the dashboard, and the DMD reported
+    /// "nothing to be approved" with three requests waiting on him.
+    /// </summary>
+    private string TravelApprovalLink(TravelRequest request)
+    {
+        var url = (config["App:BaseUrl"] ?? "https://logistics.desiconapp.com").TrimEnd('/');
+        return $"""
+            To approve or reject, open:
+            {url}/travel?id={request.Id}
+            """;
     }
 
     private async Task SendEmailAsync(string to, string subject, string body)

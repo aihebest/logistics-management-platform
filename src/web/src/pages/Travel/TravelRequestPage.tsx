@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   travelApi, departmentsApi, authApi, apiErrorMessage,
@@ -86,6 +87,22 @@ export default function TravelRequestPage() {
   }
   const canApprove = hasRole('Management', 'Admin')
 
+  // The request an email or notification linked to (?id=…). Scrolled into
+  // view and highlighted, so the approver lands on the Approve button.
+  const [searchParams] = useSearchParams()
+  const focusId = searchParams.get('id')
+  useEffect(() => {
+    if (!focusId || requests.length === 0) return
+    document.getElementById(`trf-${focusId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [focusId, requests.length])
+
+  /** Requests the signed-in person can act on right now. */
+  const awaitingMe = requests.filter(r =>
+    (r.status === 'PendingApproval' && canApprove && r.verifiedByName !== me?.fullName
+      && r.requestedById !== me?.id && mayApprove(r))
+    || (r.status === 'PendingVerification' && canVerify && r.requestedById !== me?.id
+      && departments.some(d => d.name === r.department && d.hodUserId === me?.id)))
+
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['travel'] })
     qc.invalidateQueries({ queryKey: ['notifications'] })
@@ -168,6 +185,13 @@ export default function TravelRequestPage() {
           approved, Logistics downloads the completed form to book from.
         </div>
 
+        {awaitingMe.length > 0 && (
+          <div className="rounded-lg bg-amber-50 border border-amber-300 px-4 py-3 text-sm text-amber-900">
+            <strong>{awaitingMe.length} request{awaitingMe.length > 1 ? 's' : ''} awaiting your decision</strong>
+            {' '}— {awaitingMe.map(r => r.formNumber).join(', ')}. Use the Approve or Verify button on each below.
+          </div>
+        )}
+
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h1 className="text-2xl font-bold text-gray-900">Travel Requests</h1>
           <div className="flex items-center gap-2 flex-wrap">
@@ -197,7 +221,8 @@ export default function TravelRequestPage() {
 
         <div className="space-y-3">
           {requests.map(r => (
-            <div key={r.id} className="card p-4">
+            <div key={r.id} id={`trf-${r.id}`}
+                 className={`card p-4 ${r.id === focusId ? 'ring-2 ring-brand-500' : ''}`}>
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex-1 min-w-[260px]">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -209,7 +234,9 @@ export default function TravelRequestPage() {
                       </span>
                     )}
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_STYLE[r.status] ?? 'bg-gray-100 text-gray-700'}`}>
-                      {STATUS_LABEL[r.status] ?? r.status}
+                      {r.isOverhead && r.status === 'PendingApproval'
+                        ? 'Awaiting DMD approval'
+                        : STATUS_LABEL[r.status] ?? r.status}
                     </span>
                     {r.hotelBookingRequired && (
                       <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
